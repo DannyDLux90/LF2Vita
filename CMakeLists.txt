@@ -13,7 +13,7 @@ include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "Little Fighter 2 Vita")
 set(VITA_TITLEID "LF2V00001")
-set(VITA_VERSION "00.62")
+set(VITA_VERSION "00.63")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -49,7 +49,7 @@ target_link_libraries(lf2vita
 
 vita_create_self(eboot.bin lf2vita UNSAFE)
 
-# v0.60+: all 690 original 2.00a files are stored inside one indexed/CRC'd
+# v0.60: all 690 original 2.00a files are stored inside one indexed/CRC'd
 # game.lf2pak. This removes hundreds of VPK entries and dramatically reduces
 # VitaShell installation metadata overhead while still keeping the game data
 # directly inside the VPK.

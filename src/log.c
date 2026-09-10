@@ -11,6 +11,7 @@
 
 #define LOG_DIR "ux0:data/LF2V00001"
 #define LOG_FILE LOG_DIR "/lf2.log"
+#define LOG_PREV_FILE LOG_DIR "/lf2_prev.log"
 #define STATE_FILE LOG_DIR "/last_state.txt"
 static SceUID g_log=-1;
 static char g_last_stage[128]="boot";
@@ -62,9 +63,15 @@ void lf2_log_init(void){
     sceIoMkdir("ux0:data",0777);sceIoMkdir(LOG_DIR,0777);
     SceUID old=sceIoOpen(STATE_FILE,SCE_O_RDONLY,0);
     char prev[512]={0};if(old>=0){int n=sceIoRead(old,prev,sizeof(prev)-1);if(n>0)prev[n]=0;sceIoClose(old);}
-    g_log=sceIoOpen(LOG_FILE,SCE_O_WRONLY|SCE_O_CREAT|SCE_O_APPEND,0666);
+    /* Keep the current diagnostic log unambiguous. Older builds appended all
+       sessions forever, which made it easy to send a stale 0.40/0.50 session
+       while testing a newer VPK. Preserve exactly one previous session. */
+    sceIoRemove(LOG_PREV_FILE);
+    sceIoRename(LOG_FILE,LOG_PREV_FILE);
+    g_log=sceIoOpen(LOG_FILE,SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
     lf2_logf("INFO","============================================================");
-    lf2_logf("INFO","Little Fighter 2 Vita 0.60 session start");
+    lf2_logf("INFO","Little Fighter 2 Vita 0.61 session start");
+    lf2_logf("INFO","build=0.61 log_policy=current_session prev=%s",LOG_PREV_FILE);
     if(prev[0]&&strstr(prev,"unclean=1"))lf2_logf("WARN","Previous session did not finish cleanly: %s",prev);
     lf2_log_memory("startup");sync_log();
 }

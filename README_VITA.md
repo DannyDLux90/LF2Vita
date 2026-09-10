@@ -1,18 +1,17 @@
-# Little Fighter 2 Vita v0.61
+# Little Fighter 2 Vita v0.63
 
 Native PS Vita work-in-progress port using Little Fighter 2 2.00a data supplied locally by the user.
 
-## v0.61 changes
+## v0.63 changes
 
-- New high-contrast embedded bitmap UI font for the main menu, VS selection cards and combat HUD.
-- Native 1.0x integer-position sprite rendering to eliminate non-integer nearest-neighbour shimmer.
-- Player facing is controlled by player input; it is no longer overwritten by nearest-enemy auto-facing.
-- One-pixel mirror-anchor correction for sprite and collision coordinates.
-- KO/death `wait`/`next` animation chains now continue correctly.
-- Sprite sheets use cumulative LF2 picture numbering (`row * col`); the numbers written in `file(a-b)` are not used for runtime indexing.
-- Fresh diagnostic log per launch: current run is `lf2.log`, previous run becomes `lf2_prev.log`.
-- P1 non-movement frame transitions are logged as `ANIM` records.
-- Audio engine is unchanged from the good v0.50/v0.60 hardware-tested path.
+- Adds native LF2 `opoint` spawning from the original character DAT files.
+- Renders and simulates stock arrows, balls, chase balls, wind/blast and flame/column objects from their own 2.00a DAT/BMP definitions.
+- Projectile `itr` damage now changes HP and applies authored knockback/effect values.
+- Henry's five-arrow command spawns five separately visible arrows.
+- Projectile spawning/hits are logged with `OBJECT` entries for hardware diagnosis.
+- 1-on-1 Championship now shows the round winner, defeated fighter and next opponent before the next round.
+- 2-on-2 Championship shows the winning team, defeated team and next team.
+- The stable v0.61 renderer/font and v0.50 audio path are otherwise intentionally unchanged.
 
 ## Vita controls
 
@@ -38,8 +37,8 @@ Native PS Vita work-in-progress port using Little Fighter 2 2.00a data supplied 
 - `ux0:data/LF2V00001/lf2_prev.log` (previous launch)
 - `ux0:data/LF2V00001/last_state.txt`
 
-New renderer diagnostics use the `RENDER` and `ANIM` tags. Texture load records include the DAT layout, cell size and expected bitmap dimensions.
+Mode transitions are logged with `stage_mode`, `stage:phase`, `championship1`, `championship2`, `battle` and `demo` tags. Renderer/action diagnostics continue to use `RENDER` and `ANIM`.
 
 ## Current limitations
 
-This is a native reimplementation, not the original Windows executable. VS combat remains the playable focus. Stage, Championship, Battle, Demo and Playback still need their complete original rules. Projectiles, weapons/pickups, catching, transformations and some character-specific states/effects remain incomplete. Backgrounds are still static Vita compositions rather than the complete original multi-layer scrolling implementation.
+The combat engine is still being rebuilt from the original 2.00a data rather than executing the Windows binary. Stage weapons and consumables, captive criminals, boss/soldier reserve spawning, multi-human local input, complete background scrolling/layers, Rudolf clone/transform semantics and held-weapon attachment (such as Freeze ice sword) remain incomplete. The Vita runtime currently supports eight active fighters; large Stage waves are therefore streamed in batches. Playback Recording can browse the stock files but does not yet decode their deterministic input stream.

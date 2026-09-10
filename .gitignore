@@ -1,0 +1,9 @@
+/build/
+/build-*/
+*.vpk
+*.velf
+*.elf
+*.bin
+LittleFighter.zip
+gamepack/game.lf2pak
+.DS_Store

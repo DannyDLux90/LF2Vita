@@ -13,12 +13,16 @@ include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "Little Fighter 2 Vita")
 set(VITA_TITLEID "LF2V00001")
-set(VITA_VERSION "00.60")
+set(VITA_VERSION "00.61")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+# Keep symbols and frame pointers in the developer ELF. The packaged SELF stays compact,
+# while future Vita crash dumps can be resolved against the matching debug ELF.
 add_compile_options(-O2 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -Wall -Wextra -Wno-unused-parameter -Wno-misleading-indentation -ffunction-sections -fdata-sections)
 add_link_options(-Wl,--gc-sections)
+
+# Request the Vita extended-memory application profile.
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
 
 add_executable(lf2vita
@@ -27,6 +31,7 @@ add_executable(lf2vita
   src/asset_pack.c
   src/audio.c
   src/log.c
+  src/ui_font.c
   src/game.c
   src/lf2_data.c
   src/lf2_core.c
@@ -43,8 +48,9 @@ target_link_libraries(lf2vita
 
 vita_create_self(eboot.bin lf2vita UNSAFE)
 
-# Generated UI/manual assets plus the locally generated proprietary game pack
-# are part of the local workspace. See WORKSPACE.md / gamepack/README.md.
+# All 690 original 2.00a files are stored inside one indexed/CRC'd game.lf2pak.
+# This removes hundreds of VPK entries and keeps VitaShell installation metadata
+# overhead low while still keeping the user's game data directly inside the VPK.
 vita_create_vpk(lf2vita.vpk ${VITA_TITLEID} eboot.bin
   VERSION ${VITA_VERSION}
   NAME ${VITA_APP_NAME}

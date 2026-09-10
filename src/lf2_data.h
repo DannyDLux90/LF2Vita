@@ -9,6 +9,7 @@
 #define LF2_MAX_SHEETS 8
 #define LF2_MAX_ITRS 8
 #define LF2_MAX_BDYS 8
+#define LF2_MAX_OPOINTS 8
 
 typedef struct {
     int kind;
@@ -21,6 +22,15 @@ typedef struct {
     int kind;
     int x, y, w, h;
 } lf2_bdy_def_t;
+
+typedef struct {
+    int kind;
+    int x, y;
+    int action;
+    int dvx, dvy, dvz;
+    int oid;
+    int facing;
+} lf2_opoint_def_t;
 
 typedef struct {
     bool present;
@@ -37,6 +47,8 @@ typedef struct {
     int itr_count;
     lf2_bdy_def_t bdys[LF2_MAX_BDYS];
     int bdy_count;
+    lf2_opoint_def_t opoints[LF2_MAX_OPOINTS];
+    int opoint_count;
 } lf2_frame_def_t;
 
 typedef struct {

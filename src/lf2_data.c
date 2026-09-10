@@ -159,6 +159,7 @@ int lf2_load_character(const char *app0_root, const char *dat_rel_path, lf2_char
     lf2_itr_def_t *cur_itr = NULL;
     lf2_bdy_def_t *cur_bdy = NULL;
 
+    int next_pic_index = 0;
     char *save = NULL;
     for (char *line = strtok_r(text, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
         while (*line == ' ' || *line == '\t' || *line == '\r') ++line;
@@ -179,9 +180,20 @@ int lf2_load_character(const char *app0_root, const char *dat_rel_path, lf2_char
             char p[128] = {0};
             if (sscanf(line, "file(%d-%d): %127s w: %d h: %d row: %d col: %d", &a,&b,p,&w,&h,&row,&col) >= 7) {
                 lf2_sheet_def_t *s = &out->sheets[out->sheet_count++];
-                s->first_pic=a; s->last_pic=b; s->w=w; s->h=h; s->row=row; s->col=col;
+                /* LF2 does not use the numbers written in file(a-b) as the
+                   runtime picture index. They are comments for data authors;
+                   pictures are numbered cumulatively by row*col. */
+                int declared_first=a, declared_last=b;
+                int cell_count=(row>0&&col>0)?row*col:1;
+                s->first_pic=next_pic_index;
+                s->last_pic=next_pic_index+cell_count-1;
+                next_pic_index += cell_count;
+                s->w=w; s->h=h; s->row=row; s->col=col;
                 lf2_normalize_relpath(p, s->path, sizeof(s->path));
                 make_mirror_path(s->path, s->mirror_path, sizeof(s->mirror_path));
+                if(declared_first!=s->first_pic || declared_last!=s->last_pic)
+                    lf2_logf("ANIM","sheet numbering normalized char=%s path=%s declared=%d-%d actual=%d-%d",
+                             out->name,s->path,declared_first,declared_last,s->first_pic,s->last_pic);
             }
         } else if (!strncmp(line, "walking_frame_rate", 18)) out->walking_frame_rate = find_float(line, "walking_frame_rate", out->walking_frame_rate);
         else if (!strncmp(line, "walking_speedz", 14)) out->walking_speedz = find_float(line, "walking_speedz", out->walking_speedz);
@@ -324,7 +336,7 @@ int lf2_load_character_textures(const char *app0_root, lf2_character_def_t *ch) 
         lf2_log_stage("match:texture_load","char=%s sheet=%d path=%s",ch->name,i,ch->sheets[i].path);
         ch->sheets[i].texture = lf2_load_bmp_colorkey(ch->sheets[i].path);
         if (!ch->sheets[i].texture) { lf2_logf("ERROR","texture failed char=%s sheet=%d",ch->name,i); return -2; }
-        ch->sheets[i].mirror_texture = NULL;
+        ch->sheets[i].mirror_texture = NULL; /* Vita renderer flips UVs; do not double GPU memory. */
         vita2d_texture_set_filters(ch->sheets[i].texture,SCE_GXM_TEXTURE_FILTER_POINT,SCE_GXM_TEXTURE_FILTER_POINT);
         unsigned texw=vita2d_texture_get_width(ch->sheets[i].texture),texh=vita2d_texture_get_height(ch->sheets[i].texture);
         unsigned expectw=(unsigned)(ch->sheets[i].row*(ch->sheets[i].w+1));

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<livearea style="psmobile" format-ver="01.00" content-rev="4">
+  <livearea-background><image>bg.png</image></livearea-background>
+  <gate><startup-image>startup.png</startup-image></gate>
+  <frame id="frame3"><liveitem><target>psla:-lf2net</target><background valign="bottom" align="center">cheat.png</background></liveitem></frame>
+</livearea>

@@ -76,7 +76,7 @@ static void make_mirror_path(const char *path, char *out, size_t cap) {
     path = input;
     const char *dot = strrchr(path, '.');
     if (!dot) {
-        snprintf(out, cap, "%s_mirror.bmp", path);
+        if (cap) { size_t room=cap>12?cap-12:0; snprintf(out,cap,"%.*s_mirror.bmp",(int)room,path); }
         return;
     }
     size_t base = (size_t)(dot - path);
@@ -135,6 +135,18 @@ static void parse_bdy_line(lf2_bdy_def_t *b, const char *line) {
     b->h = find_int(line, "h:", b->h);
 }
 
+static void parse_opoint_line(lf2_opoint_def_t *o, const char *line) {
+    o->kind = find_int(line, "kind:", o->kind);
+    o->x = find_int(line, "x:", o->x);
+    o->y = find_int(line, "y:", o->y);
+    o->action = find_int(line, "action:", o->action);
+    o->dvx = find_int(line, "dvx:", o->dvx);
+    o->dvy = find_int(line, "dvy:", o->dvy);
+    o->dvz = find_int(line, "dvz:", o->dvz);
+    o->oid = find_int(line, "oid:", o->oid);
+    o->facing = find_int(line, "facing:", o->facing);
+}
+
 int lf2_load_character(const char *app0_root, const char *dat_rel_path, lf2_character_def_t *out) {
     if (!app0_root || !dat_rel_path || !out) return -1;
     memset(out, 0, sizeof(*out));
@@ -154,10 +166,11 @@ int lf2_load_character(const char *app0_root, const char *dat_rel_path, lf2_char
     char *text = NULL;
     if (read_decode_dat(full, &text, NULL) < 0) return -2;
 
-    enum { SEC_NONE, SEC_ITR, SEC_BDY } sec = SEC_NONE;
+    enum { SEC_NONE, SEC_ITR, SEC_BDY, SEC_OPOINT } sec = SEC_NONE;
     lf2_frame_def_t *fr = NULL;
     lf2_itr_def_t *cur_itr = NULL;
     lf2_bdy_def_t *cur_bdy = NULL;
+    lf2_opoint_def_t *cur_opoint = NULL;
 
     int next_pic_index = 0;
     char *save = NULL;
@@ -182,7 +195,9 @@ int lf2_load_character(const char *app0_root, const char *dat_rel_path, lf2_char
                 lf2_sheet_def_t *s = &out->sheets[out->sheet_count++];
                 /* LF2 does not use the numbers written in file(a-b) as the
                    runtime picture index. They are comments for data authors;
-                   pictures are numbered cumulatively by row*col. */
+                   pictures are numbered cumulatively by row*col. This matters
+                   for stock data such as Justin, where later sheets restart
+                   the written labels at 0-69. */
                 int declared_first=a, declared_last=b;
                 int cell_count=(row>0&&col>0)?row*col:1;
                 s->first_pic=next_pic_index;
@@ -220,7 +235,7 @@ int lf2_load_character(const char *app0_root, const char *dat_rel_path, lf2_char
                 sec = SEC_NONE;
             } else fr = NULL;
         } else if (!strcmp(line, "<frame_end>")) {
-            fr = NULL; sec = SEC_NONE; cur_itr = NULL; cur_bdy = NULL;
+            fr = NULL; sec = SEC_NONE; cur_itr = NULL; cur_bdy = NULL; cur_opoint = NULL;
         } else if (fr && !strcmp(line, "itr:")) {
             if (fr->itr_count < LF2_MAX_ITRS) {
                 cur_itr = &fr->itrs[fr->itr_count];
@@ -239,12 +254,22 @@ int lf2_load_character(const char *app0_root, const char *dat_rel_path, lf2_char
         } else if (fr && !strcmp(line, "bdy_end:")) {
             if (cur_bdy && fr->bdy_count < LF2_MAX_BDYS) fr->bdy_count++;
             cur_bdy = NULL; sec = SEC_NONE;
+        } else if (fr && !strcmp(line, "opoint:")) {
+            if (fr->opoint_count < LF2_MAX_OPOINTS) {
+                cur_opoint = &fr->opoints[fr->opoint_count];
+                memset(cur_opoint, 0, sizeof(*cur_opoint));
+                sec = SEC_OPOINT;
+            }
+        } else if (fr && !strcmp(line, "opoint_end:")) {
+            if (cur_opoint && fr->opoint_count < LF2_MAX_OPOINTS) fr->opoint_count++;
+            cur_opoint = NULL; sec = SEC_NONE;
         } else if (fr && !strncmp(line, "sound:", 6)) {
             copy_trimmed_value(line, "sound:", fr->sound, sizeof(fr->sound));
             lf2_normalize_relpath(fr->sound, fr->sound, sizeof(fr->sound));
         } else if (fr) {
             if (sec == SEC_ITR && cur_itr) parse_itr_line(cur_itr, line);
             else if (sec == SEC_BDY && cur_bdy) parse_bdy_line(cur_bdy, line);
+            else if (sec == SEC_OPOINT && cur_opoint) parse_opoint_line(cur_opoint, line);
             else if (strstr(line, "pic:")) parse_main_frame_line(fr, line);
         }
     }
@@ -268,6 +293,7 @@ void lf2_make_black_transparent(vita2d_texture *tex) {
         }
     }
 }
+
 
 #pragma pack(push,1)
 typedef struct { uint16_t type; uint32_t size; uint16_t r1,r2; uint32_t off; } bmp_file_hdr_t;
@@ -337,6 +363,9 @@ int lf2_load_character_textures(const char *app0_root, lf2_character_def_t *ch) 
         ch->sheets[i].texture = lf2_load_bmp_colorkey(ch->sheets[i].path);
         if (!ch->sheets[i].texture) { lf2_logf("ERROR","texture failed char=%s sheet=%d",ch->name,i); return -2; }
         ch->sheets[i].mirror_texture = NULL; /* Vita renderer flips UVs; do not double GPU memory. */
+        /* LF2 sprite sheets are pixel art with a one-pixel separator between
+           cells. Linear filtering samples across that separator and adjacent
+           frames, so always use nearest/point filtering for character art. */
         vita2d_texture_set_filters(ch->sheets[i].texture,SCE_GXM_TEXTURE_FILTER_POINT,SCE_GXM_TEXTURE_FILTER_POINT);
         unsigned texw=vita2d_texture_get_width(ch->sheets[i].texture),texh=vita2d_texture_get_height(ch->sheets[i].texture);
         unsigned expectw=(unsigned)(ch->sheets[i].row*(ch->sheets[i].w+1));

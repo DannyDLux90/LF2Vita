@@ -31,6 +31,10 @@ ITR kinds observed in the pack: kind 0 (897), 4 (286), 5 (245), 6 (162), 7 (127)
 - State-12 weak-hit protection (`fall < 41`) and state-14 CPU target de-prioritisation.
 - Continuous Stage runtime with preloaded fighter/item assets and immediate dead-slot reuse.
 
+### Hardware correction pass
+
+The current 0.69 correction pass fixes four hardware-confirmed regressions: bottle duration no longer uses `weapon_hp`, L+□ provides an explicit Vita throw path through the authored throw frames, Stage dead-slot reuse preserves persistent corpse visuals, and hidden-character shortcuts resolve attack/jump command families instead of assuming every fighter has `hit_Fa`.
+
 ## High-priority fidelity gaps
 
 ### Combat / defense

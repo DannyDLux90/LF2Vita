@@ -1,3 +1,231 @@
+static void update_control(fighter_t *f, const input_t *in) {
+    static const input_t zero={0};
+    if(!in)in=&zero;
+    if(f->fall_points>0)f->fall_points--;
+    if(f->hit_flash>0)f->hit_flash--;
+    if(f->arest_ticks>0)f->arest_ticks--;
+    for(int ri=0;ri<=LF2_MAX_CPUS;ri++)if(f->vrest_ticks[ri]>0)f->vrest_ticks[ri]--;
+    if(f->sonata_damage_cooldown>0)f->sonata_damage_cooldown--;
+    if(f->ice_sword_ticks>0)f->ice_sword_ticks--;
+    if(f->drinking&&item_is_bottle(f->held_oid)&&!f->dead){
+        /* Bottle healing is intentionally time-based rather than an instant
+           pickup bonus. It follows the original 2.00a behaviour closely:
+           milk mainly restores HP plus some MP, beer only restores MP. */
+        /* PC state 17 can be interrupted by Defend. Releasing Square also
+           stops the drink but keeps the remaining bottle units. */
+        if(in->defend_pressed||(!in->attack&&f->drink_tick>3)){finish_drink(f,0);return;}
+        f->drink_tick++;
+        if(f->held_oid==122){
+            if((f->drink_tick%5)==0 && f->hp<f->max_hp){f->hp+=8;if(f->hp>f->max_hp)f->hp=f->max_hp;}
+            if((f->drink_tick%3)==0 && f->mp<500){f->mp+=5;if(f->mp>500)f->mp=500;}
+        }else if(f->mp<500){f->mp+=6;if(f->mp>500)f->mp=500;}
+        if(f->held_units>0)f->held_units--;
+        if(f->frame<55||f->frame>58){if(f->def.frames[55].present)set_frame(f,55);}
+        else update_animation(f,in);
+        if(f->held_units<=0){finish_drink(f,1);return;}
+        f->x=clampf(f->x,g_world_min_x,g_world_max_x);f->z=clampf(f->z,-70.0f,75.0f);
+        return;
+    }
+    if(f->caught_by>=0 && !f->dead){
+        /* The catcher owns position/frame progression via cpoint. The caught
+           fighter cannot independently walk/attack until released. */
+        f->vx=f->vy=f->vz=0.0f;
+        return;
+    }
+
+    /* A dead fighter still has physics and a complete knock-down sequence.
+       v0.64 stopped simulating the whole match as soon as HP reached zero,
+       which left corpses suspended in the exact hit pose. */
+    if(f->dead){
+        f->frozen_ticks=0;f->burn_ticks=0;f->sonata_ticks=0;
+        if(f->y<0.0f||f->vy!=0.0f||f->falling){
+            if(!f->falling){f->falling=true;if(f->def.frames[180].present)set_frame(f,180);}
+            fighter_physics_step(f);
+            if(f->falling)update_animation(f,NULL);
+        } else {
+            /* Keep the final lying frame; do not let 230/231 walk through
+               frame 219 back into a standing pose after death. */
+            if(f->frame!=230&&f->frame!=231){
+                int lie=(f->facing&&f->def.frames[231].present)?231:230;
+                if(f->def.frames[lie].present)set_frame(f,lie);
+            }
+        }
+        return;
+    }
+
+    if(f->sonata_ticks>0){
+        f->sonata_ticks--;f->status_age++;
+        /* Hover/lift toward roughly one character height above the floor. */
+        if(f->y>-118.0f)f->y-=2.35f;
+        if(f->y<-118.0f)f->y=-118.0f;
+        f->vx*=0.70f;f->vz*=0.75f;f->vy=0.0f;
+        int fr=180+((f->status_age/2)&3);
+        if(f->def.frames[fr].present&&f->frame!=fr)set_frame(f,fr);
+        if(f->sonata_ticks==0){
+            f->falling=true;f->vy=0.0f;
+            if(f->def.frames[180].present)set_frame(f,180);
+            lf2_logf("STATUS","%s sonata released y=%.1f",f->def.name,f->y);
+        }
+        f->x=clampf(f->x,g_world_min_x,g_world_max_x);f->z=clampf(f->z,-70.0f,75.0f);
+        return;
+    }
+
+    if(f->frozen_ticks>0){
+        f->frozen_ticks--;f->status_age++;
+        /* First three ticks use the ice impact frame, then the authored
+           frozen frame. A frozen airborne fighter still falls as a block. */
+        if(f->status_age==3&&f->def.frames[201].present)set_frame(f,201);
+        if(f->y<0.0f||f->vy!=0.0f)fighter_physics_step(f);
+        if(f->frozen_ticks==0){
+            f->falling=true;
+            if(f->def.frames[202].present)set_frame(f,202);
+            else if(f->def.frames[182].present)set_frame(f,182);
+            if(f->vy==0.0f)f->vy=-3.0f;
+            lf2_logf("STATUS","%s thaw -> falling",f->def.name);
+        }
+        return;
+    }
+
+    if(f->burn_ticks>0){
+        f->burn_ticks--;f->status_age++;
+        fighter_physics_step(f);
+        update_animation(f,NULL); /* 203<->204 or 205<->206 while burning */
+        if(f->burn_ticks==0){
+            f->falling=true;
+            if(f->def.frames[180].present)set_frame(f,180);
+            if(f->vy==0.0f)f->vy=-5.0f;
+            lf2_logf("STATUS","%s burn ended -> falling",f->def.name);
+        }
+        return;
+    }
+
+    bool locked=in_action(f)||f->frame==110||f->y<0.0f;
+    if(!locked){
+        int cmd=resolve_command_frame(f,in);
+        if(cmd>0)start_special_frame(f,cmd);
+        else if(in->attack_pressed)start_attack(f);
+        else if(in->defend_pressed)set_frame(f,110);
+        else if(in->jump_pressed){
+            set_frame(f,210);f->vy=f->def.jump_height;
+            if(in->left)f->vx=-f->def.jump_distance;if(in->right)f->vx=f->def.jump_distance;
+            if(in->up)f->vz=-f->def.jump_distancez;if(in->down)f->vz=f->def.jump_distancez;
+        } else {
+            bool heavy=f->held_oid&&item_is_heavy(f->held_oid);
+            bool running=in->run&&f->def.frames[heavy?16:9].present;
+            float sx=heavy?(running?f->def.heavy_running_speed:f->def.heavy_walking_speed):(running?f->def.running_speed:f->def.walking_speed);
+            float sz=heavy?(running?f->def.heavy_running_speedz:f->def.heavy_walking_speedz):(running?f->def.running_speedz:f->def.walking_speedz);bool moving=false;
+            if(in->left){f->x-=sx;f->facing=1;moving=true;}if(in->right){f->x+=sx;f->facing=0;moving=true;}
+            if(in->up){f->z-=sz;moving=true;}if(in->down){f->z+=sz;moving=true;}
+            if(moving){
+                f->walk_phase++;int first=heavy?(running?16:12):(running?9:5),last=heavy?(running?18:15):(running?11:8),count=last-first+1;
+                float rate=running?f->def.running_frame_rate:f->def.walking_frame_rate;int period=(int)(rate+0.5f);if(period<1)period=1;
+                int wf=first+(f->walk_phase/period)%count;if(f->frame<first||f->frame>last||f->frame!=wf)set_frame(f,wf);
+            }else if(heavy&&f->frame>=16&&f->frame<=18&&f->def.frames[19].present)set_frame(f,19);
+            else if((f->frame>=5&&f->frame<=19))set_frame(f,0);
+        }
+    }else if(f->frame==110&&!in->defend&&f->ticks>4)set_frame(f,0);
+
+    fighter_physics_step(f);
+    /* Keep regeneration deliberately slower than the continuous costs. */
+    if(f->mp<500 && ++f->mp_regen_tick>=2){f->mp++;f->mp_regen_tick=0;}
+    update_animation(f,in);
+}
+
+static bool rect_overlap_i(int ax,int ay,int aw,int ah,int bx,int by,int bw,int bh) {
+    return lf2_rect_overlap(ax,ay,(unsigned)aw,(unsigned)ah,bx,by,(unsigned)bw,(unsigned)bh);
+}
+
+static void region_world(const fighter_t *f,int rx,int ry,int rw,int rh,int *x,int *y) {
+    lf2_frame_def_t *fr=(lf2_frame_def_t*)&f->def.frames[f->frame];
+    if (!f->facing) *x=(int)f->x-fr->centerx+rx;
+    else *x=(int)f->x+1+fr->centerx-rw-rx;
+    *y=(int)f->y-fr->centery+ry;
+}
+
+static void cpoint_world_xy(const fighter_t *f,const lf2_cpoint_def_t *cp,float *x,float *y){
+    if(!f||!cp||!x||!y)return;const lf2_frame_def_t *fr=&f->def.frames[f->frame];
+    *x=!f->facing?f->x-(float)fr->centerx+(float)cp->x:f->x+(float)fr->centerx-(float)cp->x;
+    *y=f->y-(float)fr->centery+(float)cp->y;
+}
+
+static void release_caught_pair(fighter_t *fighters,int total,int holder_idx,int victim_idx){
+    if(!fighters||holder_idx<0||holder_idx>=total||victim_idx<0||victim_idx>=total)return;
+    fighter_t *h=&fighters[holder_idx],*v=&fighters[victim_idx];
+    if(h->holding_slot==victim_idx)h->holding_slot=-1;
+    if(v->caught_by==holder_idx)v->caught_by=-1;
+}
+
+static int caught_is_hurtable(fighter_t *fighters,int total,int victim_idx,int attacker_idx){
+    if(!fighters||victim_idx<0||victim_idx>=total)return 1;fighter_t *v=&fighters[victim_idx];
+    if(v->caught_by<0||v->caught_by>=total)return 1;
+    if(attacker_idx==v->caught_by)return 0; /* catch damage is cpoint-driven */
+    fighter_t *h=&fighters[v->caught_by];lf2_frame_def_t *hf=frame_def(h);
+    return hf&&hf->cpoint.present&&hf->cpoint.kind==1&&hf->cpoint.hurtable!=0;
+}
+
+static void sync_catch_pair(fighter_t *fighters,int total,int holder_idx){
+    if(!fighters||holder_idx<0||holder_idx>=total)return;fighter_t *h=&fighters[holder_idx];int vi=h->holding_slot;
+    if(vi<0||vi>=total)return;fighter_t *v=&fighters[vi];
+    if(!h->active||h->dead||!v->active||v->dead||v->caught_by!=holder_idx){release_caught_pair(fighters,total,holder_idx,vi);return;}
+    lf2_frame_def_t *hf=frame_def(h);if(!hf||!hf->cpoint.present||hf->cpoint.kind!=1){release_caught_pair(fighters,total,holder_idx,vi);return;}
+    lf2_cpoint_def_t *hc=&hf->cpoint;
+    if(hc->vaction){int va=hc->vaction<0?-hc->vaction:hc->vaction;if(va>0&&va<LF2_MAX_FRAMES&&v->def.frames[va].present&&v->frame!=va)set_frame_signed(v,hc->vaction);}
+    lf2_frame_def_t *vf=frame_def(v);float tx=h->x+(h->facing?-36.0f:36.0f),ty=h->y-38.0f;
+    cpoint_world_xy(h,hc,&tx,&ty);
+    if(vf&&vf->cpoint.present&&vf->cpoint.kind==2){
+        lf2_cpoint_def_t *vc=&vf->cpoint;
+        v->x=!v->facing?tx+(float)vf->centerx-(float)vc->x:tx-(float)vf->centerx+(float)vc->x;
+        v->y=ty+(float)vf->centery-(float)vc->y;
+    }else{v->x=tx;v->y=ty;}
+    v->z=h->z;v->vx=v->vy=v->vz=0.0f;
+}
+
+static void sync_all_catches(fighter_t *fighters,int total){for(int i=0;i<total;i++)if(fighters[i].active&&fighters[i].holding_slot>=0)sync_catch_pair(fighters,total,i);}
+
+static void handle_catch_input(fighter_t *fighters,int total,int holder_idx,const input_t *in){
+    if(!fighters||!in||holder_idx<0||holder_idx>=total)return;fighter_t *h=&fighters[holder_idx];int vi=h->holding_slot;
+    if(vi<0||vi>=total||fighters[vi].caught_by!=holder_idx)return;lf2_frame_def_t *hf=frame_def(h);
+    if(!hf||!hf->cpoint.present||hf->cpoint.kind!=1)return;lf2_cpoint_def_t *cp=&hf->cpoint;
+    if(cp->dircontrol){if(in->left)h->facing=1;else if(in->right)h->facing=0;}
+    int dir=in->left||in->right||in->up||in->down;
+    if(in->attack_pressed&&dir&&cp->taction)set_frame_signed(h,cp->taction);
+    else if(in->attack_pressed&&cp->aaction)set_frame_signed(h,cp->aaction);
+    else if(in->jump_pressed&&cp->jaction)set_frame_signed(h,cp->jaction);
+}
+
+static void process_cpoint_event(fighter_t *fighters,int total,int holder_idx){
+    if(!fighters||holder_idx<0||holder_idx>=total)return;fighter_t *h=&fighters[holder_idx];int vi=h->holding_slot;
+    if(vi<0||vi>=total)return;fighter_t *v=&fighters[vi];if(v->caught_by!=holder_idx)return;
+    lf2_frame_def_t *hf=frame_def(h);if(!hf||!hf->cpoint.present||hf->cpoint.kind!=1)return;lf2_cpoint_def_t *cp=&hf->cpoint;
+    if(cp->injury>0){int old=v->hp;v->hp-=cp->injury;if(v->hp<0)v->hp=0;if(v->hp==0)v->dead=true;lf2_logf("GRAB","%s catch hit %s hp=%d->%d frame=%d",h->def.name,v->def.name,old,v->hp,h->frame);}
+    if(v->dead){release_caught_pair(fighters,total,holder_idx,vi);return;}
+    if(cp->throwvx||cp->throwvy){
+        if(cp->vaction)set_frame_signed(v,cp->vaction);
+        if(cp->throwinjury>0){v->hp-=cp->throwinjury;if(v->hp<0)v->hp=0;if(v->hp==0)v->dead=true;}
+        v->falling=true;v->thrown_by=holder_idx;v->vx=(float)(h->facing?-cp->throwvx:cp->throwvx);v->vy=(float)cp->throwvy;
+        if(cp->throwvz){int z=abs(cp->throwvz);v->vz=(float)((rand()%(z*2+1))-z);}else v->vz=0.0f;
+        release_caught_pair(fighters,total,holder_idx,vi);
+        lf2_logf("GRAB","%s threw %s frame=%d vel=%.1f,%.1f,%.1f injury=%d",h->def.name,v->def.name,h->frame,v->vx,v->vy,v->vz,cp->throwinjury);
+    }
+}
+
+static int are_enemies(const fighter_t *a,const fighter_t *b){
+    if(!a||!b||a==b)return 0;
+    /* Independent fighters are hostile to everybody. Team members only spare
+       fighters that share the same numbered team. */
+    return a->team==0 || b->team==0 || a->team!=b->team;
+}
+
+static const object_catalog_entry_t *object_catalog_find(int oid){
+    for(size_t i=0;i<sizeof(g_object_catalog)/sizeof(g_object_catalog[0]);i++)
+        if(g_object_catalog[i].oid==oid)return &g_object_catalog[i];
+    return NULL;
+}
+
+static object_cache_entry_t *object_cache_get(object_world_t *w,int oid){
+    if(!w)return NULL;
+    for(int i=0;i<w->cache_count;i++)if(w->cache[i].used&&w->cache[i].oid==oid)return &w->cache[i];
+    const object_catalog_entry_t *cat=object_catalog_find(oid);
     if(!cat){lf2_logf("OBJECT","unsupported oid=%d (not in stock projectile catalog)",oid);return NULL;}
     if(w->cache_count>=LF2_MAX_OBJECT_CACHE){lf2_logf("ERROR","object cache full oid=%d",oid);return NULL;}
     object_cache_entry_t *c=&w->cache[w->cache_count++];memset(c,0,sizeof(*c));c->used=true;c->oid=oid;c->type=cat->type;
@@ -36,7 +264,10 @@ static world_object_t *spawn_pickup_item(object_world_t *w,int oid,float x,float
     world_object_t *o=world_alloc_object(w);if(!o)return NULL;
     o->cache=cache;o->oid=oid;o->type=cache->type;o->owner=-1;o->team=0;o->pickup_item=true;
     o->x=clampf(x,g_world_min_x,g_world_max_x);o->z=clampf(z,-65.0f,70.0f);o->y=y;o->facing=0;
-    o->durability=cache->def.weapon_hp>0?cache->def.weapon_hp:item_units_for_oid(oid);o->grounded=(y>=0.0f);o->vy=o->grounded?0.0f:0.4f;
+    /* weapon_hp is durability for weapons, but is NOT drink duration. Stock
+       Milk/Beer use 100/125 time units respectively. */
+    o->durability=item_is_bottle(oid)?item_units_for_oid(oid):(cache->def.weapon_hp>0?cache->def.weapon_hp:item_units_for_oid(oid));
+    o->grounded=(y>=0.0f);o->vy=o->grounded?0.0f:0.4f;
     object_set_frame(o,o->grounded?object_ground_frame(cache):0);
     if(!o->active)return NULL;
     lf2_logf("ITEM","spawn oid=%d name=%s pos=%.1f,%.1f,%.1f authored=%d",oid,item_name(oid),o->x,o->y,o->z,y>=0.0f?1:0);
@@ -86,230 +317,3 @@ static int item_is_simple_throw(int oid){return item_is_heavy(oid)||oid==121;}
 static int item_is_direction_throw(int oid){return oid==120||oid==124;}
 static int fighter_is_dash_frame(const fighter_t *f){return f&&(f->frame==213||f->frame==214||f->frame==216||f->frame==217);}
 
-/* PC LF2 has a small throw-command hierarchy. Heavy objects/baseballs throw
-   on Attack. Knife/boomerang throw on direction+Attack. Bottles and ordinary
-   light weapons require a run/jump/dash throw command; otherwise Square keeps
-   its normal swing/drink meaning. Pickup remains a dedicated Vita action on L. */
-static int fighter_handle_item_input(object_world_t *w,fighter_t *f,input_t *in){
-    if(!w||!f||!in||f->dead||!f->active)return 0;
-    if(f->held_oid){
-        int dir=in->left||in->right||in->up||in->down;
-        int airborne=f->y<0.0f||f->vy!=0.0f;
-        int dash=fighter_is_dash_frame(f);
-        int throw_now=0;
-        if(in->attack_pressed){
-            if(item_is_simple_throw(f->held_oid))throw_now=1;
-            else if(item_is_direction_throw(f->held_oid)&&dir)throw_now=1;
-            else if(item_is_bottle(f->held_oid)){if(airborne||dash||(in->run&&dir))throw_now=1;}
-            else if(dir&&(airborne||dash||in->run))throw_now=1;
-        }
-        if(throw_now&&!f->drinking){
-            int tf=item_is_heavy(f->held_oid)?50:(airborne||dash?52:45);
-            if(tf>=0&&tf<LF2_MAX_FRAMES&&f->def.frames[tf].present){
-                set_frame(f,tf);
-                lf2_logf("ITEM","%s throw start oid=%d name=%s frame=%d",f->def.name,f->held_oid,item_name(f->held_oid),tf);
-                return 1;
-            }
-        }
-        if(item_is_bottle(f->held_oid)&&in->attack&&!f->drinking){
-            f->drinking=true;f->drink_tick=0;
-            if(f->def.frames[55].present)set_frame(f,55);
-            lf2_logf("ITEM","%s starts drinking %s units=%d hp=%d mp=%d",f->def.name,item_name(f->held_oid),f->held_units,f->hp,f->mp);
-            return 1;
-        }
-        return 0;
-    }
-    /* L is deliberately separate from Square. Accept held L as well as its
-       edge so entering the pickup radius while holding L is reliable. */
-    if(!in->pickup || in_action(f) || f->falling || f->y<0.0f)return 0;
-    world_object_t *o=nearest_loose_item(w,f);if(!o)return 0;
-    f->held_oid=o->oid;f->held_units=o->durability>0?o->durability:(o->cache&&o->cache->def.weapon_hp>0?o->cache->def.weapon_hp:item_units_for_oid(o->oid));f->drinking=false;f->drink_tick=0;
-    o->active=false;
-    int pick_frame=item_is_heavy(f->held_oid)?116:115;if(pick_frame<LF2_MAX_FRAMES&&f->def.frames[pick_frame].present)set_frame(f,pick_frame);
-    lf2_audio_play("data/009.wav");
-    lf2_logf("ITEM","%s picked oid=%d name=%s units=%d",f->def.name,f->held_oid,item_name(f->held_oid),f->held_units);
-    return 1;
-}
-
-static void item_director_tick(object_world_t *w,int *timer){
-    if(!w||!timer)return;
-    if(*timer>0){(*timer)--;return;}
-    if(count_loose_items(w)>=4){*timer=180;return;}
-    static const int ids[]={100,101,120,121,122,123,124,150,151};
-    int oid=ids[rand()%(int)(sizeof(ids)/sizeof(ids[0]))];
-    float span=g_world_max_x-g_world_min_x-160.0f;if(span<80.0f)span=80.0f;
-    float x=g_world_min_x+80.0f+(float)(rand()%1000)/1000.0f*span;
-    float z=-55.0f+(float)(rand()%120);
-    spawn_pickup_item(w,oid,x,z,-220.0f-(float)(rand()%80));
-    *timer=420+(rand()%360); /* roughly every 14..26 seconds at 30 Hz */
-}
-
-static lf2_frame_def_t *object_frame_def(world_object_t *o){
-    if(!o||!o->active||!o->cache||o->frame<0||o->frame>=LF2_MAX_FRAMES||!o->cache->def.frames[o->frame].present)return NULL;
-    return &o->cache->def.frames[o->frame];
-}
-
-static void object_set_frame(world_object_t *o,int id){
-    if(!o||!o->cache)return;
-    if(id<0||id>=LF2_MAX_FRAMES||!o->cache->def.frames[id].present){o->active=false;return;}
-    o->frame=id;o->ticks=0;o->opoint_fired=false;
-    lf2_frame_def_t *fr=&o->cache->def.frames[id];
-    if(fr->dvx==550)o->vx=0;else if(fr->dvx)o->vx=(float)(o->facing?-fr->dvx:fr->dvx);
-    if(fr->dvy==550)o->vy=0;else if(fr->dvy)o->vy=(float)fr->dvy;
-    if(fr->dvz==550)o->vz=0;else if(fr->dvz)o->vz=(float)fr->dvz;
-    if(fr->sound[0])lf2_audio_play(fr->sound);
-}
-
-static world_object_t *world_alloc_object(object_world_t *w){
-    if(!w)return NULL;
-    for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(!w->objects[i].active){memset(&w->objects[i],0,sizeof(w->objects[i]));w->objects[i].active=true;return &w->objects[i];}
-    static int warned=0;if(!warned++){lf2_logf("WARN","active object pool full (%d)",LF2_MAX_ACTIVE_OBJECTS);}return NULL;
-}
-
-static void object_spawn_one(object_world_t *w,fighter_t *owner,int owner_idx,const lf2_opoint_def_t *op,int variant,int count){
-    if(!w||!owner||!op||op->oid<=0)return;
-    object_cache_entry_t *cache=object_cache_get(w,op->oid);if(!cache)return;
-    world_object_t *o=world_alloc_object(w);if(!o)return;
-    o->cache=cache;o->oid=op->oid;o->type=cache->type;o->owner=owner_idx;o->team=owner->team;
-    int backwards=(op->facing%10)==1;
-    if(op->facing==10)o->facing=0;else o->facing=owner->facing^(backwards?1:0);
-    lf2_frame_def_t *fr=frame_def(owner);if(!fr){o->active=false;return;}
-    if(!owner->facing)o->x=owner->x-(float)fr->centerx+(float)op->x;
-    else o->x=owner->x+1.0f+(float)fr->centerx-(float)op->x;
-    o->y=owner->y-(float)fr->centery+(float)op->y;o->z=owner->z;
-    if(op->kind==2){
-        o->attached=true;o->attach_dx=o->x-owner->x;o->attach_dy=o->y-owner->y;o->attach_dz=o->z-owner->z;
-        owner->ice_sword_ticks=900;
-        lf2_logf("OBJECT","held weapon attach owner=%s oid=%d action=%d duration=%d",owner->def.name,op->oid,op->action,owner->ice_sword_ticks);
-    }
-    object_set_frame(o,op->action);
-    if(!o->active)return;
-    /* Explicit opoint launch speeds override values in the first object frame. */
-    if(op->dvx)o->vx=(float)(o->facing?-op->dvx:op->dvx);
-    if(op->dvy)o->vy=(float)op->dvy;
-    if(op->dvz)o->vz=(float)(o->facing?-op->dvz:op->dvz);
-    /* LF2's facing: N0 creates N copies. Henry's five-arrow shot relies on
-       those copies being spatially distinct; spread them symmetrically while
-       preserving the authored centre arrow. */
-    if(count>1){float mid=(float)(count-1)*0.5f,off=(float)variant-mid;o->vy+=off*0.85f;o->z+=off*4.0f;}
-    lf2_logf("OBJECT","spawn oid=%d type=%d owner=%d action=%d facing=%d copy=%d/%d pos=%.1f,%.1f,%.1f vel=%.1f,%.1f,%.1f",
-             o->oid,o->type,owner_idx,o->frame,o->facing,variant+1,count,o->x,o->y,o->z,o->vx,o->vy,o->vz);
-}
-
-/* Type-3 objects can themselves contain opoints. This is essential to the
-   stock LF2 projectile state machines: energy balls rebound/split by creating
-   replacement objects, Firzen's chase objects generate flame/chase children,
-   and several projectile disappear frames spawn their follow-up effect. */
-static void object_spawn_child_one(object_world_t *w,const world_object_t *parent,
-                                   const lf2_opoint_def_t *op,int variant,int count){
-    if(!w||!parent||!parent->active||!op||op->oid<=0)return;
-    object_cache_entry_t *cache=object_cache_get(w,op->oid);if(!cache)return;
-    world_object_t *o=world_alloc_object(w);if(!o)return;
-    o->cache=cache;o->oid=op->oid;o->type=cache->type;o->owner=parent->owner;o->team=parent->team;
-    int backwards=(op->facing%10)==1;
-    if(op->facing==10)o->facing=0;else o->facing=parent->facing^(backwards?1:0);
-    lf2_frame_def_t *fr=(lf2_frame_def_t*)&parent->cache->def.frames[parent->frame];
-    if(!parent->facing)o->x=parent->x-(float)fr->centerx+(float)op->x;
-    else o->x=parent->x+1.0f+(float)fr->centerx-(float)op->x;
-    o->y=parent->y-(float)fr->centery+(float)op->y;o->z=parent->z;
-    object_set_frame(o,op->action);if(!o->active)return;
-    if(op->dvx)o->vx=(float)(o->facing?-op->dvx:op->dvx);
-    if(op->dvy)o->vy=(float)op->dvy;
-    if(op->dvz)o->vz=(float)(o->facing?-op->dvz:op->dvz);
-    if(count>1){float mid=(float)(count-1)*0.5f,off=(float)variant-mid;o->vy+=off*0.85f;o->z+=off*4.0f;}
-    lf2_logf("OBJECT","child spawn parent=%d oid=%d owner=%d action=%d copy=%d/%d pos=%.1f,%.1f,%.1f",
-             parent->oid,o->oid,o->owner,o->frame,variant+1,count,o->x,o->y,o->z);
-}
-
-static int clone_roster_for_oid(int oid){return oid==5?3:(oid==52?22:-1);}
-
-static void spawn_fighter_opoints(object_world_t *w,fighter_t *fighters,int total,int owner_idx){
-    if(!w||!fighters||owner_idx<0||owner_idx>=total)return;
-    fighter_t *f=&fighters[owner_idx];
-    if(f->dead||!f->active||f->opoint_fired)return;lf2_frame_def_t *fr=frame_def(f);if(!fr||fr->opoint_count<=0)return;
-    f->opoint_fired=true;
-    for(int i=0;i<fr->opoint_count;i++){
-        const lf2_opoint_def_t *op=&fr->opoints[i];
-        int count=(op->facing>=20)?op->facing/10:1;if(count<1)count=1;if(count>8)count=8;
-        int clone_roster=clone_roster_for_oid(op->oid);
-        if(clone_roster>=0){
-            for(int n=0;n<count;n++){
-                int slot=-1;for(int k=1;k<total;k++)if(!fighters[k].active){slot=k;break;}
-                if(slot<0){lf2_logf("CLONE","%s clone oid=%d skipped: no free fighter slot",f->def.name,op->oid);break;}
-                float side=f->facing?-1.0f:1.0f;float x=clampf(f->x+side*(42.0f+24.0f*n),g_world_min_x,g_world_max_x);
-                float z=clampf(f->z+(n?18.0f:-18.0f),-70.0f,75.0f);
-                if(load_fighter(&fighters[slot],clone_roster,true,f->team,x,z,f->facing,slot,10)==0){
-                    fighters[slot].clone=true;fighters[slot].mp=150;
-                    if(op->action>0&&op->action<LF2_MAX_FRAMES&&fighters[slot].def.frames[op->action].present)set_frame(&fighters[slot],op->action);
-                    lf2_logf("CLONE","owner=%s slot=%d form=%s hp=10 action=%d",f->def.name,slot,fighters[slot].def.name,op->action);
-                }
-            }
-            continue;
-        }
-        for(int n=0;n<count;n++)object_spawn_one(w,f,owner_idx,op,n,count);
-    }
-}
-
-static void object_region_world(const world_object_t *o,int rx,int ry,int rw,int rh,int *x,int *y){
-    lf2_frame_def_t *fr=(lf2_frame_def_t*)&o->cache->def.frames[o->frame];
-    if(!o->facing)*x=(int)o->x-fr->centerx+rx;else *x=(int)o->x+1+fr->centerx-rw-rx;
-    *y=(int)o->y-fr->centery+ry;
-}
-
-static fighter_t *object_nearest_enemy(world_object_t *o,fighter_t *fighters,int total){
-    fighter_t *best=NULL;float bd=1.0e30f;if(!o)return NULL;
-    for(int i=0;i<total;i++){fighter_t *f=&fighters[i];if(f->dead||i==o->owner)continue;if(o->team&&f->team==o->team)continue;float dx=f->x-o->x,dz=f->z-o->z,d=dx*dx+dz*dz;if(d<bd){bd=d;best=f;}}
-    return best;
-}
-
-static void update_object(object_world_t *w,world_object_t *o,fighter_t *fighters,int total){
-    if(!o||!o->active)return;
-    if(o->arest_ticks>0)o->arest_ticks--;for(int ri=0;ri<=LF2_MAX_CPUS;ri++)if(o->vrest_ticks[ri]>0)o->vrest_ticks[ri]--;
-    lf2_frame_def_t *fr=object_frame_def(o);if(!fr){o->active=false;return;}
-    if(o->pickup_item){
-        /* Loose stock items use their DAT animation instead of a synthetic
-           spinner. In-air frames loop until contact, then 70->71->72->64
-           (light items) or 21->20 (heavy items) plays once and remains at the
-           stable authored ground frame. */
-        if(!o->grounded){
-            o->age++;o->x+=o->vx;o->y+=o->vy;o->z+=o->vz;o->vy+=0.62f;o->vx*=0.992f;o->vz*=0.992f;
-            if(o->y>=0.0f){
-                o->y=0.0f;o->vy=o->vx=o->vz=0.0f;o->grounded=true;
-                object_set_frame(o,object_landing_frame(o->cache));
-                lf2_logf("ITEM","land oid=%d name=%s x=%.1f z=%.1f frame=%d",o->oid,item_name(o->oid),o->x,o->z,o->frame);
-                return;
-            }
-            o->ticks++;int duration=fr->wait+1;if(duration<1)duration=1;
-            if(o->ticks>=duration){
-                int next=fr->next;
-                if(next==999||next==1000||next<0||next>=40||!o->cache->def.frames[next].present)next=0;
-                object_set_frame(o,next);
-            }
-        }else{
-            int stable=object_ground_frame(o->cache);
-            if(o->frame!=stable){
-                o->ticks++;int duration=fr->wait+1;if(duration<1)duration=1;
-                if(o->ticks>=duration){
-                    int next=fr->next;
-                    if(next==999||next==1000||next<0||next>=LF2_MAX_FRAMES||
-                       !o->cache->def.frames[next].present||next==0)next=stable;
-                    object_set_frame(o,next);
-                }
-            }
-        }
-        return;
-    }
-    if(fr->state==9998){o->active=false;return;}
-    o->age++;
-    if(!o->opoint_fired&&fr->opoint_count>0){
-        o->opoint_fired=true;
-        for(int i=0;i<fr->opoint_count;i++){
-            const lf2_opoint_def_t *op=&fr->opoints[i];
-            int count=(op->facing>=20)?op->facing/10:1;if(count<1)count=1;if(count>8)count=8;
-            for(int n=0;n<count;n++)object_spawn_child_one(w,o,op,n,count);
-        }
-    }
-    if(o->attached){
-        if(o->owner<0||o->owner>=total||!fighters[o->owner].active||fighters[o->owner].dead||fighters[o->owner].ice_sword_ticks<=0){o->active=false;return;}
-        fighter_t *a=&fighters[o->owner];
-        o->facing=a->facing;

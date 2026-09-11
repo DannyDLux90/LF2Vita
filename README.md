@@ -4,7 +4,7 @@ Native PS Vita reimplementation of **Little Fighter 2 2.00a**, built with VitaSD
 
 > The public repository contains the port source code and reproducible workspace tooling. Original Little Fighter 2 game data, music and derived game artwork are not redistributed in Git. Supply your own LF2 2.00a files to make the local game pack and title BGM.
 
-Current hardware-test version: **0.69**.
+Current hardware-test version: **0.69**. Current milestone: **PC gameplay fidelity / optimization**.
 
 ## Current state
 
@@ -23,7 +23,7 @@ Current hardware-test version: **0.69**.
 - Rudolf caught-target transformation, Louis→LouisEX and Firen+Freeze→Firzen have first-pass native state handling.
 - Detailed current-session log in `ux0:data/LF2V00001/lf2.log`.
 
-See [VERSION_0.69.md](VERSION_0.69.md) for the latest changes and [NETWORK.md](NETWORK.md) for the networking plan/status.
+See [VERSION_0.69.md](VERSION_0.69.md) for the latest corrections, [PC_FIDELITY_AUDIT.md](PC_FIDELITY_AUDIT.md) for the compatibility audit, and [ROADMAP.md](ROADMAP.md) for the milestone order.
 
 ## Build
 

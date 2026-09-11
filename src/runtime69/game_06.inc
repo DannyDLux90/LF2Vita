@@ -1,3 +1,236 @@
+
+static void draw_fighter(fighter_t *f) {
+    if(!f)return;
+    draw_character_frame(&f->def,f->frame,f->facing,f->x,f->y,f->z,f->hit_flash,f->def.name);
+}
+
+static void draw_stage_corpses(const object_world_t *world){
+    if(!world)return;
+    int order[LF2_MAX_STAGE_CORPSES],n=0;
+    for(int i=0;i<world->corpse_count&&i<LF2_MAX_STAGE_CORPSES;i++)if(world->corpses[i].active&&world->corpses[i].def)order[n++]=i;
+    for(int i=0;i<n;i++)for(int j=i+1;j<n;j++)if(world->corpses[order[i]].z>world->corpses[order[j]].z){int t=order[i];order[i]=order[j];order[j]=t;}
+    for(int i=0;i<n;i++){
+        const stage_corpse_t *c=&world->corpses[order[i]];
+        draw_character_frame(c->def,c->frame,c->facing,c->x,c->y,c->z,0,c->def->name);
+    }
+}
+
+
+static void draw_object(world_object_t *o){
+    if(!o||!o->active||!o->cache)return;lf2_frame_def_t *fr=object_frame_def(o);if(!fr)return;
+    lf2_character_def_t *def=&o->cache->def;lf2_sheet_def_t *s=lf2_sheet_for_pic(def,fr->pic);if(!s||!s->texture)return;
+    int local=fr->pic-s->first_pic,across=s->row>0?s->row:1,down=s->col>0?s->col:1,col=local%across,row=local/across;
+    if(local<0||col<0||col>=across||row<0||row>=down)return;
+    int pitchx=s->w+1,pitchy=s->h+1;float tx=(float)(col*pitchx),ty=(float)(row*pitchy),sw=(float)s->w,sh=(float)s->h;
+    float tw=(float)vita2d_texture_get_width(s->texture),th=(float)vita2d_texture_get_height(s->texture);if(sw<=0||sh<=0||tw<=0||th<=0||tx+sw>tw||ty+sh>th)return;
+    float u0=(tx+0.5f)/tw,u1=(tx+sw-0.5f)/tw,v0=(ty+0.5f)/th,v1=(ty+sh-0.5f)/th;if(o->facing){float t=u0;u0=u1;u1=t;}
+    float anchor=o->facing?((sw-1.0f)-(float)fr->centerx):(float)fr->centerx;
+    float x=floorf(screen_x(o->x)-anchor+0.5f),y=floorf(GROUND_Y+o->z+o->y-(float)fr->centery+0.5f),x1=x+sw,y1=y+sh;
+    vita2d_texture_vertex *v=(vita2d_texture_vertex*)vita2d_pool_memalign(6*sizeof(*v),sizeof(*v));if(!v)return;
+    v[0]=(vita2d_texture_vertex){x,y,0.5f,u0,v0};v[1]=(vita2d_texture_vertex){x,y1,0.5f,u0,v1};v[2]=(vita2d_texture_vertex){x1,y,0.5f,u1,v0};
+    v[3]=(vita2d_texture_vertex){x,y1,0.5f,u0,v1};v[4]=(vita2d_texture_vertex){x1,y1,0.5f,u1,v1};v[5]=(vita2d_texture_vertex){x1,y,0.5f,u1,v0};
+    vita2d_draw_array_textured(s->texture,SCE_GXM_PRIMITIVE_TRIANGLES,v,6,RGBA8(255,255,255,255));
+}
+
+static object_cache_entry_t *object_cache_find_loaded(object_world_t *w,int oid){
+    if(!w)return NULL;for(int i=0;i<w->cache_count;i++)if(w->cache[i].used&&w->cache[i].oid==oid)return &w->cache[i];return NULL;
+}
+
+static int held_item_frame_and_pose(object_world_t *w,const fighter_t *f,
+                                    object_cache_entry_t **cache_out,int *frame_out,
+                                    float *x_out,float *y_out,int *cover_out){
+    if(!w||!f||!f->active||!f->held_oid)return 0;
+    object_cache_entry_t *c=object_cache_find_loaded(w,f->held_oid);if(!c)return 0;
+    const lf2_frame_def_t *ff=(f->frame>=0&&f->frame<LF2_MAX_FRAMES&&f->def.frames[f->frame].present)?&f->def.frames[f->frame]:NULL;
+    int fr=-1;
+    if(ff&&ff->wpoint.present){
+        int wa=ff->wpoint.weaponact;
+        if(wa>=0&&wa<LF2_MAX_FRAMES&&c->def.frames[wa].present)fr=wa;
+    }
+    if(fr<0)fr=(f->drinking&&c->def.frames[31].present)?31:(item_is_heavy(f->held_oid)&&c->def.frames[10].present?10:20);
+    if(fr<0||fr>=LF2_MAX_FRAMES||!c->def.frames[fr].present)return 0;
+    const lf2_frame_def_t *wf=&c->def.frames[fr];
+    float x=f->x+(f->facing?-29.0f:29.0f),y=f->y-40.0f;
+    if(ff&&ff->wpoint.present&&wf->wpoint.present){
+        /* Align fighter wpoint(kind 1) with weapon wpoint(kind 2). This is the
+           coordinate rule used by the original DAT format. Mirroring must be
+           applied to both source points, not just to the weapon texture. */
+        if(!f->facing)
+            x=f->x-(float)ff->centerx+(float)ff->wpoint.x+(float)wf->centerx-(float)wf->wpoint.x;
+        else
+            x=f->x+(float)ff->centerx-(float)ff->wpoint.x-(float)wf->centerx+(float)wf->wpoint.x;
+        y=f->y-(float)ff->centery+(float)ff->wpoint.y+(float)wf->centery-(float)wf->wpoint.y;
+    }
+    if(cache_out)*cache_out=c;if(frame_out)*frame_out=fr;if(x_out)*x_out=x;if(y_out)*y_out=y;
+    if(cover_out)*cover_out=(ff&&ff->wpoint.present)?ff->wpoint.cover:0;
+    return 1;
+}
+
+static int held_item_cover(object_world_t *w,const fighter_t *f){
+    int cover=0;if(!held_item_frame_and_pose(w,f,NULL,NULL,NULL,NULL,&cover))return 0;return cover!=0;
+}
+
+static void draw_held_item(object_world_t *w,const fighter_t *f){
+    object_cache_entry_t *c=NULL;int fr=0;float x=0,y=0;
+    if(!held_item_frame_and_pose(w,f,&c,&fr,&x,&y,NULL))return;
+    world_object_t tmp;memset(&tmp,0,sizeof(tmp));tmp.active=true;tmp.cache=c;tmp.oid=f->held_oid;tmp.type=c->type;tmp.frame=fr;tmp.facing=f->facing;
+    tmp.x=x;tmp.y=y;tmp.z=f->z+0.4f;
+    draw_object(&tmp);
+}
+
+static void draw_bar(float x,float y,float w,float h,float value,float max,unsigned fg) {
+    vita2d_draw_rectangle(x,y,w,h,RGBA8(10,13,24,220));
+    vita2d_draw_rectangle(x+2,y+2,(w-4)*(max>0?value/max:0),h-4,fg);
+}
+
+static int fighter_is_lying(const fighter_t *f){
+    if(!f||!f->active||f->dead)return 0;
+    if(f->frame<0||f->frame>=LF2_MAX_FRAMES||!f->def.frames[f->frame].present)return 0;
+    return f->def.frames[f->frame].state==14;
+}
+
+static fighter_t *nearest_living_enemy(fighter_t *me,fighter_t *fighters,int total){
+    fighter_t *best=NULL;float bestd=1.0e30f;
+    for(int i=0;i<total;i++){
+        fighter_t *c=&fighters[i];if(!c->active||c==me||c->dead||!are_enemies(me,c)||fighter_is_lying(c))continue;
+        float dx=c->x-me->x,dz=c->z-me->z,d=dx*dx+dz*dz;
+        if(d<bestd){best=c;bestd=d;}
+    }
+    return best;
+}
+
+static fighter_t *nearest_lying_enemy(fighter_t *me,fighter_t *fighters,int total){
+    fighter_t *best=NULL;float bestd=1.0e30f;
+    for(int i=0;i<total;i++){
+        fighter_t *c=&fighters[i];if(c==me||!fighter_is_lying(c)||!are_enemies(me,c))continue;
+        float dx=c->x-me->x,dz=c->z-me->z,d=dx*dx+dz*dz;if(d<bestd){best=c;bestd=d;}
+    }
+    return best;
+}
+
+static input_t make_ai_retreat_input(fighter_t *me,fighter_t *down){
+    input_t in={0};if(!me||!down)return in;float dx=down->x-me->x,dz=down->z-me->z;
+    if(fabsf(dx)<180.0f){if(dx<0)in.right=true;else in.left=true;}
+    if(fabsf(dz)<34.0f){if(dz<0)in.down=true;else in.up=true;}
+    in.run=(fabsf(dx)<130.0f);return in;
+}
+
+static int player_has_enemy(fighter_t *fighters,int total){
+    fighter_t *p=&fighters[0];
+    for(int i=1;i<total;i++)if(fighters[i].active&&!fighters[i].dead&&are_enemies(p,&fighters[i]))return 1;
+    return 0;
+}
+
+static int player_side_alive(fighter_t *fighters,int total){
+    fighter_t *p=&fighters[0];
+    if(p->team==0)return p->active&&!p->dead;
+    for(int i=0;i<total;i++)if(fighters[i].active&&!fighters[i].dead&&fighters[i].team==p->team)return 1;
+    return 0;
+}
+
+static int player_side_won(fighter_t *fighters,int total){
+    return player_side_alive(fighters,total) && !player_has_enemy(fighters,total);
+}
+
+static int dead_bodies_settled(fighter_t *fighters,int total){
+    for(int i=0;i<total;i++)if(fighters[i].active&&fighters[i].dead){
+        if(fighters[i].y<0.0f||fighters[i].vy!=0.0f||fighters[i].falling)return 0;
+        if(fighters[i].frame!=230&&fighters[i].frame!=231)return 0;
+    }
+    return 1;
+}
+
+static const char *team_name(int team){
+    static const char *n[]={"Independent","Team 1","Team 2","Team 3","Team 4"};
+    return (team>=0&&team<=4)?n[team]:"Independent";
+}
+
+static const char *difficulty_name(int d){
+    static const char *n[]={"Easy","Normal","Difficult","CRAZY!"};
+    return (d>=0&&d<=3)?n[d]:"Normal";
+}
+
+static void draw_status_slot(fighter_t *f,int slot){
+    int col=slot%4,row=slot/4;float x=(float)(col*240),y=(float)(row*64);unsigned panel=RGBA8(44,78,157,248);
+    /* LF2's PC HUD is four columns by two rows.  On 960x544 a 240x64
+       slot is almost the exact aspect-preserving scale of the original
+       800x600 status board shown by the retail PC game. */
+    vita2d_draw_rectangle(x,y,238,62,panel);vita2d_draw_rectangle(x+238,y,2,62,RGBA8(24,48,112,255));vita2d_draw_rectangle(x,y+62,240,2,RGBA8(24,48,112,255));
+    float bx=x+64,bw=154;vita2d_draw_rectangle(bx,y+12,bw,14,RGBA8(29,45,93,255));vita2d_draw_rectangle(bx,y+36,bw,11,RGBA8(29,45,93,255));
+    if(!f||!f->active)return;
+    if(f->hud_face)vita2d_draw_texture(f->hud_face,x+12,y+7);
+    vita2d_draw_rectangle(bx+2,y+14,(bw-4)*((float)f->hp/(float)(f->max_hp?f->max_hp:1)),10,RGBA8(240,25,36,255));
+    vita2d_draw_rectangle(bx+2,y+38,(bw-4)*((float)f->mp/500.0f),7,RGBA8(25,45,245,255));
+    if(lf2_ui_font_ready())lf2_ui_draw_textf(x+12,y+52,0.52f,RGBA8(255,255,255,255),"%s",f->ai?"Com":"P1");
+}
+
+static void draw_world_background(vita2d_texture *bg){
+    if(!bg)return;
+    float tw=(float)vita2d_texture_get_width(bg),th=(float)vita2d_texture_get_height(bg);
+    if(tw<=0||th<=0)return;
+    float sx=960.0f/tw,sy=544.0f/th;
+    if(g_camera_x<=0.01f){
+        vita2d_draw_texture_scale(bg,0,0,sx,sy);
+        return;
+    }
+    /* The packaged stage preview is one viewport wide. Until the complete
+       bg.dat multi-layer renderer lands, tile that original-derived preview
+       and move it at a mild parallax rate. This makes stage phase transitions
+       continuous instead of tearing the scene down and reloading it. */
+    float tile=tw*sx;
+    float off=-fmodf(g_camera_x*0.55f,tile);
+    if(off>0)off-=tile;
+    for(float x=off;x<960.0f;x+=tile)vita2d_draw_texture_scale(bg,x,0,sx,sy);
+}
+
+static void draw_match(vita2d_pgf *font,vita2d_texture *bg,fighter_t *fighters,object_world_t *world,int cpu_count,int difficulty,bool cheat,bool paused,const lf2_match_options_t *options) {
+    fighter_t *p=&fighters[0];int total=LF2_MAX_CPUS+1;
+    vita2d_start_drawing();vita2d_clear_screen();
+    draw_world_background(bg);
+    /* Original LF2 reserves a two-row blue status board at the top. */
+    vita2d_draw_rectangle(0,0,960,128,RGBA8(37,71,148,255));
+    for(int i=0;i<8;i++)draw_status_slot(i<total?&fighters[i]:NULL,i);
+    /* Stage corpses are snapshots backed by the shared Stage texture cache.
+       Draw them under active fighters/objects so dead enemies persist visually
+       even when their logical CPU slot is reused by the next wave. */
+    draw_stage_corpses(world);
+    int order[LF2_MAX_CPUS+1];for(int i=0;i<total;i++)order[i]=i;for(int i=0;i<total;i++)for(int j=i+1;j<total;j++)if(fighters[order[i]].z>fighters[order[j]].z){int t=order[i];order[i]=order[j];order[j]=t;}
+    int oo[LF2_MAX_ACTIVE_OBJECTS],on=0;if(world){for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)oo[on++]=i;for(int i=0;i<on;i++)for(int j=i+1;j<on;j++)if(world->objects[oo[i]].z>world->objects[oo[j]].z){int t=oo[i];oo[i]=oo[j];oo[j]=t;}}
+    int fi=0,oi=0;while(fi<total||oi<on){
+        if(oi<on&&(fi>=total||world->objects[oo[oi]].z<=fighters[order[fi]].z))draw_object(&world->objects[oo[oi++]]);
+        else {
+            int idx=order[fi++];
+            /* wpoint.cover=1 means the fighter sprite covers the held object. */
+            int behind=held_item_cover(world,&fighters[idx]);
+            if(behind)draw_held_item(world,&fighters[idx]);
+            draw_fighter(&fighters[idx]);
+            if(!behind)draw_held_item(world,&fighters[idx]);
+        }
+    }draw_hit_fx(world);
+    if(lf2_ui_font_ready()){
+        if(options&&options->hud_label&&options->hud_label[0])lf2_ui_draw_text(724,518,0.58f,RGBA8(255,255,255,255),options->hud_label);
+        if(fighters&&world&&fighters[0].active&&!fighters[0].dead){
+            fighter_t *p=&fighters[0];
+            if(!p->held_oid){
+                world_object_t *near=nearest_loose_item(world,p);
+                if(near)lf2_ui_draw_textf(350,486,0.56f,RGBA8(255,238,145,255),"L: Pick up %s",item_name(near->oid));
+            }else if(item_is_bottle(p->held_oid)){
+                lf2_ui_draw_textf(320,486,0.54f,RGBA8(255,238,145,255),"Square: Drink %s   L+Square: Throw",item_name(p->held_oid));
+            }else{
+                lf2_ui_draw_textf(350,486,0.56f,RGBA8(255,238,145,255),"L+Square: Throw %s",item_name(p->held_oid));
+            }
+        }
+        if(cheat)lf2_ui_draw_text(760,122,0.55f,RGBA8(255,225,80,255),"LF2.NET / CRAZY");
+    }
+    if((!options||!options->suppress_result_overlay) && (!player_side_alive(fighters,total)||!player_has_enemy(fighters,total))){
+        vita2d_draw_rectangle(235,185,490,135,RGBA8(0,0,0,205));const char *msg=player_side_won(fighters,total)?"K.O. - Spieler 1 gewinnt":"K.O. - Spieler 1 ist besiegt";
+        if(lf2_ui_font_ready()){float tw=lf2_ui_text_width(0.92f,msg);lf2_ui_draw_text(480.0f-tw*0.5f,216,0.92f,RGBA8(255,255,255,255),msg);if(options&&options->auto_continue)lf2_ui_draw_text(337,268,0.72f,RGBA8(235,242,255,255),"Weiter...");else if(options&&!options->allow_rematch)lf2_ui_draw_text(280,268,0.72f,RGBA8(235,242,255,255),"X: Continue     Circle: Menu");else lf2_ui_draw_text(302,268,0.72f,RGBA8(235,242,255,255),"X: Rematch     Circle: Menu");}
+    }else if(paused){vita2d_draw_rectangle(285,190,390,120,RGBA8(0,0,0,215));if(lf2_ui_font_ready()){lf2_ui_draw_text(418,216,1.0f,RGBA8(255,255,255,255),"PAUSE");lf2_ui_draw_text(330,264,0.72f,RGBA8(235,242,255,255),"START: Resume   Circle: Menu");}}
+    vita2d_end_drawing();vita2d_swap_buffers();
+}
+
+static int load_fighter(fighter_t *f,int roster_idx,bool ai,int team,float x,float z,int facing,int slot,int hp) {
+    memset(f,0,sizeof(*f)); f->ai=ai;f->active=true;f->team=team; f->x=x; f->z=z; f->facing=facing;f->owns_assets=true;
     f->roster_idx=roster_idx;f->transform_origin=-1;f->transform_target=-1;f->fusion_partner_slot=-1;f->holding_slot=-1;f->caught_by=-1;f->thrown_by=-1;
     if(hp<=0)hp=500; f->hp=f->max_hp=hp; f->mp=500;
     lf2_log_stage("match:character_parse","slot=%s%d roster=%d name=%s team=%d dat=%s",ai?"CPU":"P",ai?slot:1,roster_idx,lf2_roster[roster_idx].name,team,lf2_roster[roster_idx].dat);
@@ -64,186 +297,3 @@ static void spawn_louis_armor(object_world_t *world,fighter_t *f,int owner_idx){
     }
     lf2_logf("FORM","Louis armour burst state9996 owner=%s",f->def.name);
 }
-
-static fighter_t *farthest_living_teammate(fighter_t *me,fighter_t *fighters,int total){
-    fighter_t *best=NULL;float bd=-1.0f;
-    for(int i=0;i<total;i++){fighter_t *c=&fighters[i];if(!c->active||c==me||c->dead||me->team==0||c->team!=me->team)continue;float dx=c->x-me->x,dz=c->z-me->z,d=dx*dx+dz*dz;if(d>bd){bd=d;best=c;}}
-    return best;
-}
-
-static void process_frame_state(fighter_t *fighters,int total,int idx,object_world_t *world){
-    if(!fighters||idx<0||idx>=total)return;fighter_t *f=&fighters[idx];if(!f->active||f->dead)return;
-    if(f->state_processed_serial==f->frame_serial)return;f->state_processed_serial=f->frame_serial;
-    lf2_frame_def_t *fr=frame_def(f);if(!fr)return;int st=fr->state;
-    release_held_throw(world,f,idx);
-    process_cpoint_event(fighters,total,idx);
-    if(st==400){
-        fighter_t *t=nearest_living_enemy(f,fighters,total);if(t){float side=f->x<t->x?-1.0f:1.0f;f->x=clampf(t->x+side*120.0f,g_world_min_x,g_world_max_x);f->z=t->z;f->y=0;f->vx=f->vy=f->vz=0;lf2_logf("STATE","%s teleport enemy=%s x=%.1f z=%.1f",f->def.name,t->def.name,f->x,f->z);}return;
-    }
-    if(st==401){
-        fighter_t *t=farthest_living_teammate(f,fighters,total);if(t){float side=f->x<t->x?-1.0f:1.0f;f->x=clampf(t->x+side*60.0f,g_world_min_x,g_world_max_x);f->z=t->z;f->y=0;f->vx=f->vy=f->vz=0;lf2_logf("STATE","%s teleport teammate=%s x=%.1f z=%.1f",f->def.name,t->def.name,f->x,f->z);}return;
-    }
-    if(st==1700){int old=f->hp;f->hp+=100;if(f->hp>f->max_hp)f->hp=f->max_hp;lf2_logf("STATE","%s heal state1700 hp=%d->%d",f->def.name,old,f->hp);return;}
-    /* Rudolf's first transform is the caught-target move on frames 235-240.
-       The normal walking grab records the victim roster; frame 239 carries
-       throwinjury:-1 in the original cpoint and is the actual transform cue. */
-    if(f->roster_idx==3 && f->frame==239 && f->transform_target>=0){
-        int target=f->transform_target;f->transform_origin=3;
-        fighter_change_form(f,target,0,"Rudolf caught-target transform");return;
-    }
-    /* state 500/501 is Rudolf's second transformation. It is only enabled
-       after a target was learned by the first caught transformation. */
-    if(st==500 && f->roster_idx==3){
-        if(f->transform_target>=0)lf2_logf("FORM","Rudolf second-transform armed roster=%d",f->transform_target);
-        else lf2_logf("FORM","Rudolf second-transform locked: no captured target");
-        return;
-    }
-    if(st==501 && f->roster_idx==3 && f->transform_target>=0){int target=f->transform_target;f->transform_origin=3;fighter_change_form(f,target,0,"Rudolf second transform");return;}
-    if(st==9996 && f->roster_idx==4){spawn_louis_armor(world,f,idx);return;}
-    if(st==9995 && f->roster_idx==4){fighter_change_form(f,20,0,"Louis -> LouisEX");return;}
-    if(st>=8000&&st<9000){int r=lf2_id_to_roster(st-8000);if(r>=0&&r!=f->roster_idx)fighter_change_form(f,r,0,"state 8xxx");return;}
-}
-
-static int defuse_firzen(fighter_t *fighters,int total,int controller,const char *reason){
-    if(!fighters||controller<0||controller>=total)return 0;fighter_t *f=&fighters[controller];
-    if(!f->active||f->roster_idx!=21||f->fusion_return_roster<0||f->fusion_partner_roster<0)return 0;
-    int ret=f->fusion_return_roster,pr=f->fusion_partner_roster,slot=f->fusion_partner_slot;
-    int php=f->fusion_partner_hp,pmp=f->fusion_partner_mp,team=f->fusion_team;bool pai=f->fusion_partner_ai;
-    float x=f->x,z=f->z;int facing=f->facing;
-    f->fusion_ticks=0;f->fusion_return_roster=-1;f->fusion_partner_roster=-1;f->fusion_partner_slot=-1;
-    fighter_change_form(f,ret,112,"Firzen defusion");
-    if(slot>0&&slot<total&&!fighters[slot].active){
-        float px=clampf(x+(facing?-52.0f:52.0f),g_world_min_x,g_world_max_x);
-        if(load_fighter(&fighters[slot],pr,pai,team,px,z,facing^1,slot,php>0?php:1)==0){fighters[slot].mp=pmp;if(fighters[slot].def.frames[112].present)set_frame(&fighters[slot],112);}
-    }
-    lf2_logf("FORM","Firzen defuse reason=%s controller=%s partner=%s",reason?reason:"-",f->def.name,(slot>0&&slot<total&&fighters[slot].active)?fighters[slot].def.name:"missing");
-    return 1;
-}
-
-static int handle_form_input(fighter_t *fighters,int total,int idx,const input_t *in){
-    if(!fighters||!in||idx<0||idx>=total)return 0;fighter_t *f=&fighters[idx];
-    int dja=in->defend && ((in->attack_pressed&&in->jump)||(in->jump_pressed&&in->attack));
-    if(!dja)return 0;
-    if(f->roster_idx==21&&f->fusion_ticks>0)return defuse_firzen(fighters,total,idx,"DJA");
-    if(f->transform_origin==3&&f->roster_idx!=3){
-        fighter_change_form(f,3,245,"Rudolf transform back");f->transform_origin=-1;return 1;
-    }
-    return 0;
-}
-
-static void check_firzen_fusion(fighter_t *fighters,int total,object_world_t *world){
-    if(!fighters)return;
-    for(int i=0;i<total;i++)for(int j=i+1;j<total;j++){
-        fighter_t *a=&fighters[i],*b=&fighters[j];if(!a->active||!b->active||a->dead||b->dead)continue;
-        int pair=((a->roster_idx==5&&b->roster_idx==6)||(a->roster_idx==6&&b->roster_idx==5));if(!pair)continue;
-        if(a->team==0||a->team!=b->team)continue;
-        lf2_frame_def_t *af=frame_def(a),*bf=frame_def(b);if(!af||!bf||af->state!=2||bf->state!=2)continue;
-        if(!g_runtime_cheat&&(a->hp>176||b->hp>176))continue;
-        if(fabsf(a->x-b->x)>50.0f||fabsf(a->z-b->z)>22.0f)continue;
-        int controller=(i==0||j==0)?0:(a->x>=b->x?i:j);int partner=controller==i?j:i;
-        fighter_t *c=&fighters[controller],*p=&fighters[partner];
-        int ret=c->roster_idx,pr=p->roster_idx;int php=p->hp,pmp=p->mp;bool pai=p->ai;int team=c->team;
-        float mx=(c->x+p->x)*0.5f,mz=(c->z+p->z)*0.5f;
-        unload_fighter_slot(p);c->x=mx;c->z=mz;
-        c->fusion_return_roster=ret;c->fusion_partner_roster=pr;c->fusion_partner_slot=partner;c->fusion_partner_hp=php;c->fusion_partner_mp=pmp;c->fusion_partner_ai=pai;c->fusion_team=team;c->fusion_ticks=4500;
-        if(fighter_change_form(c,21,290,"Firen + Freeze fusion")==0){if(world)spawn_hit_fx(world,c,2);lf2_logf("FORM","FUSION slots=%d+%d controller=%d Firzen ticks=4500 hp=%d",i,j,controller,c->hp);}return;
-    }
-}
-
-static void tick_fusion(fighter_t *fighters,int total){
-    for(int i=0;i<total;i++){fighter_t *f=&fighters[i];if(!f->active||f->roster_idx!=21||f->fusion_ticks<=0)continue;if(--f->fusion_ticks<=0){defuse_firzen(fighters,total,i,"4500tu timeout");return;}}
-}
-
-static const float spawn_x[LF2_MAX_CPUS+1]={165.0f,795.0f,705.0f,615.0f,525.0f,435.0f,345.0f,255.0f};
-static const float spawn_z[LF2_MAX_CPUS+1]={0.0f,-52.0f,-18.0f,18.0f,52.0f,-35.0f,35.0f,0.0f};
-
-static void reset_fighter_state(fighter_t *f,float x,float z,int facing){
-    f->x=x;f->z=z;f->y=0;f->vx=f->vy=f->vz=0;f->facing=facing;f->hp=f->max_hp;f->mp=500;f->dead=false;f->invuln=0;f->ai_cooldown=0;f->hit_latched=false;f->fall_points=0;f->falling=false;f->hit_flash=0;f->frozen_ticks=0;f->burn_ticks=0;f->sonata_ticks=0;f->sonata_damage_cooldown=0;f->status_age=0;f->mp_regen_tick=0;f->grabbed_ticks=0;f->ice_sword_ticks=0;f->held_oid=0;f->held_units=0;f->drinking=false;f->drink_tick=0;f->fusion_ticks=0;f->fusion_return_roster=-1;f->fusion_partner_roster=-1;f->fusion_partner_slot=-1;f->holding_slot=-1;f->caught_by=-1;f->thrown_by=-1;f->arest_ticks=0;memset(f->vrest_ticks,0,sizeof(f->vrest_ticks));set_frame(f,0);
-}
-
-static void reset_match(fighter_t *fighters,int cpu_count){
-    reset_fighter_state(&fighters[0],spawn_x[0],spawn_z[0],0);
-    for(int i=0;i<cpu_count;i++)reset_fighter_state(&fighters[i+1],spawn_x[i+1],spawn_z[i+1],1);
-    for(int i=cpu_count+1;i<=LF2_MAX_CPUS;i++)if(fighters[i].active)unload_fighter_slot(&fighters[i]);
-}
-
-int lf2_run_match_ex(vita2d_pgf *font, vita2d_texture *stage_bg,
-                     int player_index, int player_team,
-                     const int *cpu_indices, const int *cpu_teams, int cpu_count,
-                     int difficulty, bool cheat_enabled,
-                     const lf2_match_options_t *options) {
-    lf2_audio_music_stop();
-    g_runtime_cheat=cheat_enabled;
-    g_world_min_x=40.0f;g_world_max_x=920.0f;g_camera_x=0.0f;
-    lf2_match_options_t defaults={0};
-    defaults.allow_rematch=true;
-    if(!options)options=&defaults;
-    if(player_index<0||player_index>=lf2_roster_count||!cpu_indices||!cpu_teams||cpu_count<1||cpu_count>LF2_MAX_CPUS)return -1;
-    if(player_team<0||player_team>4)return -1;
-    if(difficulty<LF2_DIFF_EASY||difficulty>LF2_DIFF_CRAZY)return -1;
-    for(int i=0;i<cpu_count;i++)if(cpu_indices[i]<0||cpu_indices[i]>=lf2_roster_count||cpu_teams[i]<0||cpu_teams[i]>4)return -1;
-    lf2_log_stage("match:alloc","fighter_size=%u p1=%s team=%d cpus=%d difficulty=%s",(unsigned)sizeof(fighter_t),lf2_roster[player_index].name,player_team,cpu_count,difficulty_name(difficulty));
-    int total=LF2_MAX_CPUS+1;fighter_t *fighters=(fighter_t*)calloc((size_t)total,sizeof(*fighters));
-    if(!fighters){lf2_logf("ERROR","fighter heap allocation failed count=%d",total);return -10;}
-    object_world_t *world=(object_world_t*)calloc(1,sizeof(*world));
-    if(!world){lf2_logf("ERROR","object world allocation failed bytes=%u",(unsigned)sizeof(*world));free(fighters);return -11;}
-    lf2_log_memory("fighters + object world allocated");
-    for(int i=cpu_count+1;i<total;i++)fighters[i].dead=true;
-    int pmax=options->player_max_hp>0?options->player_max_hp:500;
-    if(load_fighter(&fighters[0],player_index,options->player_ai,player_team,spawn_x[0],spawn_z[0],0,1,pmax)<0){free(world);free(fighters);return -2;}
-    if(options->player_hp>0&&options->player_hp<pmax)fighters[0].hp=options->player_hp;
-    fighters[0].mp=(options->player_mp>0&&options->player_mp<=500)?options->player_mp:500;
-    int loaded=1;
-    for(int i=0;i<cpu_count;i++){
-        int chp=(options->cpu_hp&&options->cpu_hp[i]>0)?options->cpu_hp[i]:500;
-        if(load_fighter(&fighters[i+1],cpu_indices[i],true,cpu_teams[i],spawn_x[i+1],spawn_z[i+1],1,i+1,chp)<0){
-            vita2d_wait_rendering_done();for(int j=0;j<loaded;j++){if(fighters[j].hud_face)vita2d_free_texture(fighters[j].hud_face);lf2_free_character_textures(&fighters[j].def);}world_shutdown(world);free(world);free(fighters);return -3-i;
-        }loaded++;
-    }
-    lf2_log_stage("match:gpu_ready","p1=%s cpus=%d diff=%s cheat=%d pool_free=%u",fighters[0].def.name,cpu_count,difficulty_name(difficulty),cheat_enabled?1:0,(unsigned)vita2d_pool_free_space());
-    lf2_log_stage("match:first_frame_submit","pool_free=%u",(unsigned)vita2d_pool_free_space());
-    draw_match(font,stage_bg,fighters,world,cpu_count,difficulty,cheat_enabled,false,options);vita2d_wait_rendering_done();
-    lf2_log_stage("match:first_frame_complete","pool_free=%u",(unsigned)vita2d_pool_free_space());
-    uint32_t prev=0;SceCtrlData first={0};sceCtrlPeekBufferPositive(0,&first,1);prev=first.buttons;
-    uint32_t pending_pressed=0;
-    bool paused=false;int result=0;
-    srand(0x4c463256u+(unsigned)player_index*17u+(unsigned)cpu_count*47u+(unsigned)difficulty*101u);
-    int item_drop_timer=240+(rand()%180);
-    /* LF2 logic is based on 30 Hz time units. Rendering remains vblank-paced
-       at 60 Hz, while gameplay advances at a fixed 30 Hz. This keeps wait,
-       walking speeds, gravity, attack windows and animation timing in the
-       same time domain as the original data files. */
-    const uint64_t sim_step_us=33333;
-    uint64_t last_us=sceKernelGetSystemTimeWide(),acc_us=0;
-    lf2_logf("ANIM","fixed simulation rate=30Hz render_vblank=60Hz");
-    uint64_t result_since=0;
-    for(;;){
-        SceCtrlData pad={0};sceCtrlPeekBufferPositive(0,&pad,1);
-        uint32_t raw_pressed=pad.buttons&~prev;prev=pad.buttons;pending_pressed|=raw_pressed;
-        uint64_t now_us=sceKernelGetSystemTimeWide();uint64_t dt_us=now_us-last_us;last_us=now_us;
-        if(dt_us>100000)dt_us=100000; /* debugger / scheduling stall guard */
-
-        if(options->player_ai && options->allow_cancel && (raw_pressed&SCE_CTRL_CIRCLE)){result=LF2_MATCH_CANCEL;break;}
-        if(raw_pressed&SCE_CTRL_START){paused=!paused;acc_us=0;pending_pressed=0;lf2_logf("GAME","pause=%d",paused?1:0);}
-        if(paused){
-            if(raw_pressed&SCE_CTRL_CIRCLE){result=LF2_MATCH_CANCEL;break;}
-            draw_match(font,stage_bg,fighters,world,cpu_count,difficulty,cheat_enabled,paused,options);continue;
-        }
-
-        int side_alive=player_side_alive(fighters,total);
-        int enemies_alive=player_has_enemy(fighters,total);
-        if(!side_alive||!enemies_alive){
-            int outcome=(side_alive&&!enemies_alive)?LF2_MATCH_WIN:LF2_MATCH_LOSS;
-            pending_pressed=0;
-            if(!result_since){result_since=now_us;lf2_logf("GAME","round over outcome=%d; settling KO physics",outcome);}
-            /* Keep the 30 Hz simulation alive after KO. No new attacks are
-               allowed, but bodies, projectiles and hit particles finish their
-               authored motion so a fighter never freezes in mid-air. */
-            acc_us+=dt_us;int settle_guard=0;input_t zero={0};
-            while(acc_us>=sim_step_us&&settle_guard++<4){
-                for(int i=0;i<total;i++)update_control(&fighters[i],&zero);
-                for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)update_object(world,&world->objects[i],fighters,total);
-                update_hit_fx(world);acc_us-=sim_step_us;
-            }
-            if(options->auto_continue){
-                if(dead_bodies_settled(fighters,total)&&now_us-result_since>=650000ULL){result=outcome;break;}

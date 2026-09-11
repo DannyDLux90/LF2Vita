@@ -4,7 +4,7 @@ Native PS Vita work-in-progress port using Little Fighter 2 2.00a data supplied 
 
 ## v0.69 hardware-test focus
 
-v0.69 is the first broad PC-fidelity combat pass after the v0.68 Stage/item hardware test. Item pickup remains on **L**. Held items now use the stock weapon strength table and throw frame groups, catch/throw uses parsed `cpoint` data, active repeat-hit control uses `arest`/per-target `vrest`, Stage slots can be reused as soon as HP reaches zero, and CPUs stop targeting a state-14 lying player and retreat when no other active target exists.
+v0.69 is the active PC-fidelity milestone. Item pickup remains on **L**; **L+□** is an explicit Vita throw command that still runs the stock LF2 throw frames. Milk/Beer now use their authored drink-time units instead of `weapon_hp`, hidden-character shortcuts resolve the actual DAT command families, and Stage slot reuse preserves a persistent corpse snapshot so the next wave can start immediately without visually deleting defeated enemies.
 
 - Original title/menu music now loops through the existing 48 kHz Vita mixer. The local build converts `bgm/main.wma` to PCM WAV ahead of time; no WMA decoder runs on the Vita.
 - Melee and projectile contact now trigger LF2-style impact sounds instead of relying only on attack-frame sounds.
@@ -22,12 +22,14 @@ v0.69 is the first broad PC-fidelity combat pass after the v0.68 Stage/item hard
 
 - Left stick / D-pad: movement and menu navigation.
 - Strong analog-stick deflection: run.
-- □: attack; use an already-held weapon; throw when the PC throw command applies; confirm in classic-style menus.
+- □: attack / use a held item / confirm in classic-style menus.
 - L: pick up a nearby grounded item.
-- Hold □ with milk/beer: drink until released or empty.
+- L + □ while holding an item: explicit throw using the stock LF2 throw-frame chain.
+- Hold □ with milk/beer: drink until released, cancelled with ○, or empty.
 - ×: jump / alternate confirm.
-- ○: defend / combo modifier / back.
-- △ or R: primary special shortcut.
+- ○: defend / combo modifier / back; cancels an active drink.
+- △: attack-special shortcut (`hit_Fa`/`hit_Ua`/`hit_Da`, direction-aware).
+- R: jump-special shortcut (`hit_Fj`/`hit_Uj`/`hit_Dj`, direction-aware).
 - START: pause.
 - SELECT in the main menu: in-game guide.
 

@@ -49,3 +49,13 @@ The packed LF2 2.00a DAT set used for this build contains 5,868 frames, 5,042 `b
 4. Check grabs (especially standard stunned grabs and Louis catch/throw) for victim positioning, attack while held, and throw release.
 5. Let the player enter the lying state and verify CPUs stop crowding/attacking the body and move away.
 6. Clear several Stage waves and verify the next enemies start without waiting for the previous bodies to finish their lying animation.
+
+## Hardware correction pass (same 0.69 milestone)
+
+- Fixes Milk/Beer duration: bottles use the stock 100/125 drink-time units instead of the unrelated `weapon_hp: 450` value.
+- ○ now interrupts state-17 drinking without discarding a partially used bottle.
+- Adds an unambiguous Vita item throw command: **L+□** while holding an item. It starts the stock light/heavy/air throw frames and releases on authored `wpoint dvx/dvy/dvz`.
+- Keeps original PC throw triggers (including knife/boomerang direction+attack) in parallel.
+- Splits Vita special shortcuts: △ selects attack-special command roots and R selects jump-special roots, with directional variants and DAT-driven fallbacks. This covers hidden characters such as Firzen and Jan that do not expose `hit_Fa` as their primary command.
+- Stage CPU slots may still be reused immediately at HP=0, but a shared-texture corpse snapshot is retained in the world so defeated enemies no longer disappear when the next wave occupies the logical slot.
+- Current milestone is PC gameplay fidelity. Network play, server browser, PC-compatible networking, and trophies (disabled for cheat-mode sessions) are tracked as subsequent milestones in `ROADMAP.md`.

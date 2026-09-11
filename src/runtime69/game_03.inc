@@ -4,9 +4,17 @@ static void update_control(fighter_t *f, const input_t *in) {
     if(f->fall_points>0)f->fall_points--;
     if(f->hit_flash>0)f->hit_flash--;
     if(f->arest_ticks>0)f->arest_ticks--;
-    for(int ri=0;ri<=LF2_MAX_CPUS;ri++)if(f->vrest_ticks[ri]>0)f->vrest_ticks[ri]--;
+    for(int ri=0;ri<LF2_MAX_ACTORS;ri++)if(f->vrest_ticks[ri]>0)f->vrest_ticks[ri]--;
     if(f->sonata_damage_cooldown>0)f->sonata_damage_cooldown--;
     if(f->ice_sword_ticks>0)f->ice_sword_ticks--;
+    if(f->jan_heal_ticks>0){
+        f->jan_heal_ticks--;f->jan_heal_phase++;
+        if((f->jan_heal_phase==4||((f->jan_heal_phase>4)&&((f->jan_heal_phase-4)%8)==0))&&f->hp<f->max_hp){
+            int old=f->hp;f->hp+=8;if(f->hp>f->max_hp)f->hp=f->max_hp;
+            lf2_logf("STATUS","%s Jan regen hp=%d->%d left=%d",f->def.name,old,f->hp,f->jan_heal_ticks);
+        }
+        if(f->jan_heal_ticks==0)f->jan_heal_phase=0;
+    }
     if(f->drinking&&item_is_bottle(f->held_oid)&&!f->dead){
         /* Bottle healing is intentionally time-based rather than an instant
            pickup bonus. It follows the original 2.00a behaviour closely:
@@ -123,7 +131,22 @@ static void update_control(fighter_t *f, const input_t *in) {
             }else if(heavy&&f->frame>=16&&f->frame<=18&&f->def.frames[19].present)set_frame(f,19);
             else if((f->frame>=5&&f->frame<=19))set_frame(f,0);
         }
-    }else if(f->frame==110&&!in->defend&&f->ticks>4)set_frame(f,0);
+    }else{
+        /* LF2 permits explicitly authored command links while an attack/catch
+           animation is running.  Only the current frame is consulted here;
+           neutral frame-0 shortcuts must not interrupt arbitrary actions. */
+        int chained=resolve_chained_command_frame(f,in);
+        if(chained>0)start_special_frame(f,chained);
+        else if(f->frame==110&&!in->defend&&f->ticks>4)set_frame(f,0);
+    }
+
+    /* Stock state 19 (Firen burn-run) and state 301 (Deep z-movement) keep
+       accepting vertical lane control while the attack animation is locked. */
+    lf2_frame_def_t *move_fr=frame_def(f);
+    if(move_fr&&(move_fr->state==19||move_fr->state==301)){
+        float rz=f->def.running_speedz;if(rz<0)rz=-rz;if(rz<0.1f)rz=1.0f;
+        if(in->up)f->z-=rz;if(in->down)f->z+=rz;
+    }
 
     fighter_physics_step(f);
     /* Keep regeneration deliberately slower than the continuous costs. */

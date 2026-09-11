@@ -6,6 +6,12 @@
 /* LF2 supports eight fighters total. On a Vita we expose one local human
    player plus up to seven computer slots, matching the original VS screen. */
 #define LF2_MAX_CPUS 7
+/* Stage Mode separates the eight-player party from the live enemy pool.
+   Keep VS at eight fighters, but allow P1 + 7 COM allies plus up to seven
+   simultaneously active Stage enemies. */
+#define LF2_STAGE_MAX_ALLIES 7
+#define LF2_STAGE_ENEMY_SLOTS 7
+#define LF2_MAX_ACTORS (1 + LF2_STAGE_MAX_ALLIES + LF2_STAGE_ENEMY_SLOTS)
 
 enum {
     LF2_DIFF_EASY=0,
@@ -90,6 +96,15 @@ typedef struct {
     int player_mp;
     int *player_hp_out;
     int *player_mp_out;
+    /* fix3: Stage Mode supports a Vita-controlled P1 plus up to seven
+       persistent COM companions, matching the PC Stage party size. Party
+       slots and Stage-enemy actor slots are separate in the Vita runtime. */
+    int ally_count;
+    int ally_roster[LF2_STAGE_MAX_ALLIES];
+    int ally_hp[LF2_STAGE_MAX_ALLIES];
+    int ally_mp[LF2_STAGE_MAX_ALLIES];
+    int *ally_hp_out;
+    int *ally_mp_out;
     const char *hud_prefix;
 } lf2_stage_runtime_t;
 

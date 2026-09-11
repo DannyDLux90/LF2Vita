@@ -12,6 +12,7 @@
 #define LF2_STAGE_MAX_ALLIES 7
 #define LF2_STAGE_ENEMY_SLOTS 7
 #define LF2_MAX_ACTORS (1 + LF2_STAGE_MAX_ALLIES + LF2_STAGE_ENEMY_SLOTS)
+#define LF2_STAGE_SUMMARY_MAX_PLAYERS (1 + LF2_STAGE_MAX_ALLIES)
 
 enum {
     LF2_DIFF_EASY=0,
@@ -56,6 +57,18 @@ typedef struct {
     int *player_hp_out;
     int *player_mp_out;
 } lf2_match_options_t;
+
+typedef struct {
+    int participant_count;
+    int roster[LF2_STAGE_SUMMARY_MAX_PLAYERS];
+    int kills[LF2_STAGE_SUMMARY_MAX_PLAYERS];
+    int attack[LF2_STAGE_SUMMARY_MAX_PLAYERS];
+    int hp_lost[LF2_STAGE_SUMMARY_MAX_PLAYERS];
+    int mp_usage[LF2_STAGE_SUMMARY_MAX_PLAYERS];
+    int picking[LF2_STAGE_SUMMARY_MAX_PLAYERS];
+    int hp[LF2_STAGE_SUMMARY_MAX_PLAYERS];
+    int mp[LF2_STAGE_SUMMARY_MAX_PLAYERS];
+} lf2_stage_summary_t;
 
 extern const lf2_roster_entry_t lf2_roster[];
 extern const int lf2_roster_count;
@@ -111,4 +124,5 @@ typedef struct {
 int lf2_run_stage_section(vita2d_pgf *font, vita2d_texture *stage_bg,
                           int player_index, int difficulty, bool cheat_enabled,
                           const lf2_stage_runtime_t *stage);
+void lf2_get_last_stage_summary(lf2_stage_summary_t *out);
 #endif

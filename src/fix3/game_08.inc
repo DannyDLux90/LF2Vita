@@ -70,7 +70,7 @@ static int fighter_handle_item_input(object_world_t *w,fighter_t *f,input_t *in)
     world_object_t *o=nearest_loose_item(w,f);if(!o)return 0;
     f->held_oid=o->oid;
     f->held_units=o->durability>0?o->durability:(item_is_bottle(o->oid)?item_units_for_oid(o->oid):(o->cache&&o->cache->def.weapon_hp>0?o->cache->def.weapon_hp:item_units_for_oid(o->oid)));
-    f->drinking=false;f->drink_tick=0;
+    f->drinking=false;f->drink_tick=0;f->stat_picking++;
     o->active=false;
     int pick_frame=item_is_heavy(f->held_oid)?116:115;if(pick_frame<LF2_MAX_FRAMES&&f->def.frames[pick_frame].present)set_frame(f,pick_frame);
     lf2_audio_play("data/009.wav");

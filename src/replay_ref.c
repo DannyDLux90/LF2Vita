@@ -73,9 +73,43 @@ int lf2_ref_replay_vita_background(const lf2_ref_replay_t *r){
     switch(r->background){case 0:return 3;case 1:return 7;case 2:return 0;case 3:return 6;case 4:return 5;case 5:return 8;case 6:return 1;case 7:return 2;case 8:return 4;default:return 3;}
 }
 
-int lf2_ref_replay_clock(void *userdata,uint32_t local_held[4],uint32_t remote_held[4]){
+bool lf2_ref_replay_clock(void *userdata,uint32_t local_held[4],uint32_t remote_held[4]){
     lf2_ref_replay_t *r=(lf2_ref_replay_t*)userdata;if(!r||!local_held||!remote_held)return 0;
     if(r->tu>=r->movie_tus)return 0;uint32_t packet=r->tu/2u;if(packet>=r->packet_count)return 0;
     const uint8_t *k=r->keys+(size_t)packet*4u;for(int i=0;i<4;i++){local_held[i]=decode_key(k[i]);remote_held[i]=0;}
     r->tu++;return 1;
+}
+
+int lf2_ref_replay_build_match(const lf2_ref_replay_t *r,lf2_ref_match_plan_t *out){
+    if(!r||!out)return -1;memset(out,0,sizeof(*out));
+    int actor=0,human_control=0;
+    for(int slot=0;slot<LF2_REF_PLAYER_COUNT;slot++){
+        const lf2_ref_player_t *p=&r->players[slot];if(p->role<0)continue;
+        int roster=lf2_roster_from_original_id(p->character);if(roster<0)return -10-slot;
+        if(actor==0){out->player_index=roster;out->player_team=p->team;}
+        else {if(actor>7)return -30;out->cpu_indices[actor-1]=roster;out->cpu_teams[actor-1]=p->team;}
+        out->actor_fixture_slot[actor]=slot;
+        if(p->role==1){if(human_control>=4)return -40-slot;out->actor_control[actor]=(uint8_t)(1+human_control++);}
+        actor++;
+    }
+    if(actor<2)return -2;
+    out->actor_count=actor;out->cpu_count=actor-1;
+    out->stage_index=lf2_ref_replay_vita_background(r);out->difficulty=lf2_ref_replay_vita_difficulty(r);
+    return 0;
+}
+
+int lf2_ref_replay_compare_stats(const lf2_ref_replay_t *r,const lf2_ref_match_plan_t *plan,
+                                 const lf2_stock_stat_t *actual,int actual_count){
+    if(!r||!plan||!actual)return -1;int mismatches=0;
+    int n=plan->actor_count<actual_count?plan->actor_count:actual_count;
+    if(actual_count!=plan->actor_count){lf2_logf("REFCMP","actor_count expected=%d actual=%d",plan->actor_count,actual_count);mismatches++;}
+    for(int a=0;a<n;a++){
+        int slot=plan->actor_fixture_slot[a];const lf2_ref_player_t *e=&r->players[slot];const lf2_stock_stat_t *v=&actual[a];
+        int er=lf2_roster_from_original_id(e->character);
+#define CMP(field,ev,av) do{int _e=(ev),_a=(av);if(_e!=_a){lf2_logf("REFCMP","actor=%d slot=%d %s expected=%d actual=%d",a,slot+1,(field),_e,_a);mismatches++;}}while(0)
+        CMP("roster",er,v->roster_idx);CMP("team",e->team,v->team);CMP("kill",e->kill,v->kills);CMP("attack",e->attack,v->attack);
+        CMP("hp_lost",e->hp_used,v->hp_lost);CMP("mp_used",e->mp_used,v->mp_used);CMP("picking",e->picking,v->picking);
+#undef CMP
+    }
+    lf2_logf("REFCMP","done actors=%d mismatches=%d",n,mismatches);return mismatches;
 }

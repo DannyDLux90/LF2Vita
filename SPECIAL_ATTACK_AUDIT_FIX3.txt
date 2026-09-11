@@ -1,0 +1,88 @@
+ALL_AUTHORED_SPECIAL_LINKS unique=85 neutral=71 chained=14
+CHAIN data/deep.dat            frames=[121]                            hit_Fj  -> 310 PASS itr-0
+CHAIN data/henry.dat           frames=[234]                            hit_Fa  -> 245 PASS itr-0
+CHAIN data/rudolf.dat          frames=[102, 103, 104, 105, 106, 107, 108, 109] hit_Fj  -> 274 PASS itr-0
+CHAIN data/rudolf.dat          frames=[121]                            hit_ja  -> 235 PASS authored-chain
+CHAIN data/woody.dat           frames=[215, 219, 271, 286, 287, 288, 301, 302, 303] hit_Fj  -> 252 PASS itr-0
+CHAIN data/davis.dat           frames=[121]                            hit_Da  -> 274 PASS itr-0
+CHAIN data/jack.dat            frames=[245]                            hit_Fa  -> 242 PASS itr-0
+CHAIN data/monk.dat            frames=[248]                            hit_Fa  -> 243 PASS itr-0
+CHAIN data/bat.dat             frames=[121]                            hit_Da  -> 274 PASS itr-0
+CHAIN data/bat.dat             frames=[121]                            hit_Ua  -> 300 SKIP target-not-present-in-stock-DAT
+CHAIN data/justin.dat          frames=[245]                            hit_Da  -> 260 PASS itr-0
+CHAIN data/justin.dat          frames=[121]                            hit_Da  -> 274 SKIP target-not-present-in-stock-DAT
+CHAIN data/justin.dat          frames=[121]                            hit_Ua  -> 300 SKIP target-not-present-in-stock-DAT
+CHAIN data/julian.dat          frames=[275]                            hit_Fa  -> 263 PASS activate-13
+LF2Vita fix3 full special audit: fighters=23 neutral_command_roots=71
+data/deep.dat            hit_Fa  -> 235 PASS itr-0
+data/deep.dat            hit_Da  -> 260 PASS itr-0
+data/deep.dat            hit_Fj  -> 290 PASS itr-0
+data/deep.dat            hit_Uj  -> 266 PASS itr-0
+data/john.dat            hit_Fa  -> 235 PASS itr-0
+data/john.dat            hit_Ua  -> 300 PASS itr-0
+data/john.dat            hit_Fj  -> 270 PASS itr-0,itr-9
+data/john.dat            hit_Uj  -> 260 PASS itr-8,loop
+data/john.dat            hit_Dj  -> 250 PASS state-1700
+data/henry.dat           hit_Fa  -> 235 PASS itr-0
+data/henry.dat           hit_Fj  -> 270 PASS itr-0
+data/henry.dat           hit_Uj  -> 250 PASS itr-10,itr-11
+data/henry.dat           hit_ja  -> 280 PASS itr-0
+data/rudolf.dat          hit_Fa  -> 285 PASS itr-0
+data/rudolf.dat          hit_Fj  -> 273 PASS itr-0
+data/rudolf.dat          hit_Uj  -> 250 PASS authored-chain
+data/rudolf.dat          hit_Dj  -> 260 PASS clone
+data/rudolf.dat          hit_ja  -> 295 PASS state-500,state-501
+data/louis.dat           hit_Fa  -> 235 PASS itr-0
+data/louis.dat           hit_Fj  -> 247 PASS itr-0
+data/louis.dat           hit_Uj  -> 275 PASS itr-3
+data/louis.dat           hit_ja  -> 300 PASS itr-0,state-9995,state-9996
+data/firen.dat           hit_Fa  -> 235 PASS itr-0
+data/firen.dat           hit_Fj  -> 255 PASS itr-0
+data/firen.dat           hit_Uj  -> 285 PASS itr-0
+data/firen.dat           hit_Dj  -> 267 PASS itr-0
+data/freeze.dat          hit_Fa  -> 235 PASS itr-0
+data/freeze.dat          hit_Fj  -> 245 PASS itr-0,itr-14
+data/freeze.dat          hit_Uj  -> 260 PASS itr-0,itr-14,itr-15,itr-16
+data/freeze.dat          hit_Dj  -> 270 PASS itr-5
+data/dennis.dat          hit_Fa  -> 235 PASS itr-0
+data/dennis.dat          hit_Ua  -> 295 PASS chase-2,itr-0
+data/dennis.dat          hit_Da  -> 265 PASS itr-0
+data/dennis.dat          hit_Fj  -> 280 PASS itr-0
+data/woody.dat           hit_Fa  -> 235 PASS itr-0
+data/woody.dat           hit_Ua  ->  70 PASS itr-0
+data/woody.dat           hit_Da  -> 260 PASS itr-0
+data/woody.dat           hit_Fj  -> 250 PASS itr-0
+data/woody.dat           hit_Uj  -> 275 PASS itr-0,state-400
+data/woody.dat           hit_Dj  -> 290 PASS itr-0,state-401
+data/davis.dat           hit_Fa  -> 240 PASS itr-0
+data/davis.dat           hit_Ua  -> 300 PASS itr-0
+data/davis.dat           hit_Da  -> 270 PASS itr-0
+data/davis.dat           hit_Uj  -> 290 PASS itr-0
+data/mark.dat            hit_Fa  ->  85 PASS itr-0
+data/mark.dat            hit_Fj  -> 240 PASS itr-0
+data/jack.dat            hit_Fa  -> 240 PASS itr-0
+data/jack.dat            hit_Ua  -> 300 PASS itr-0
+data/sorcerer.dat        hit_Fa  -> 235 PASS itr-0
+data/sorcerer.dat        hit_Fj  -> 270 PASS itr-0
+data/sorcerer.dat        hit_Uj  -> 260 PASS itr-8,loop
+data/sorcerer.dat        hit_Dj  -> 250 PASS state-1700
+data/monk.dat            hit_Fa  -> 240 PASS itr-0
+data/jan.dat             hit_Ua  -> 260 PASS activate-5,activate-6
+data/jan.dat             hit_Uj  -> 240 PASS activate-5,activate-6
+data/knight.dat          hit_Fa  -> 240 PASS itr-0
+data/bat.dat             hit_Fa  -> 240 PASS itr-0
+data/bat.dat             hit_Fj  -> 270 PASS itr-0
+data/bat.dat             hit_Uj  -> 260 PASS activate-8
+data/justin.dat          hit_Fa  -> 250 PASS itr-0
+data/justin.dat          hit_Da  -> 240 PASS itr-0
+data/louisEX.dat         hit_Fa  -> 260 PASS itr-0
+data/louisEX.dat         hit_Da  -> 240 PASS itr-0
+data/firzen.dat          hit_Ua  -> 240 PASS activate-9,loop
+data/firzen.dat          hit_Fj  -> 265 PASS itr-0
+data/firzen.dat          hit_Uj  -> 249 PASS activate-11
+data/julian.dat          hit_Fa  -> 260 PASS activate-13
+data/julian.dat          hit_Ua  -> 235 PASS itr-0
+data/julian.dat          hit_Fj  -> 280 PASS itr-0
+data/julian.dat          hit_Uj  -> 310 PASS itr-0
+data/julian.dat          hit_ja  -> 106 PASS activate-13,clone
+PASS: all neutral stock special commands have a runtime effect path; stock throw release frames are authored and runtime fix3 markers are present.

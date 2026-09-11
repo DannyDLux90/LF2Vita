@@ -79,3 +79,10 @@ The current 0.69 correction pass fixes four hardware-confirmed regressions: bott
 ## Validation rule
 
 A feature moves from "first pass" to "verified" only after: (1) the stock DAT path is exercised, (2) Vita hardware log/visual behavior is checked, and (3) no regression is seen in Stage/VS basic combat. This avoids treating a successful cross-build as proof of PC-perfect runtime behavior.
+
+
+## fix3 coverage update
+
+The fix3 static audit reads the packed stock 2.00a DAT graph directly. It currently covers all 23 stock playable fighters, 71 special-command roots reachable from neutral/movement frames and 85 unique authored special-command links after including action/catch/combo frames. Runtime support added in this pass includes scrolling-world projectile bounds, type-3 timer/Z semantics, stock hidden-character activators, ITR kind 9 reflection, ITR kind 14 solid blocking, and current-frame combo command dispatch. This is static/runtime coverage, not a claim that every move has already been frame-perfect validated on Vita hardware.
+
+Stage Mode now supports one Vita-controlled P1 plus up to seven selectable Team-1 COM companions. Stage uses a separate seven-actor enemy pool, so a full P1+7 COM party can still face seven simultaneous enemies. True additional human input remains part of the network/local-controller work rather than being simulated in this milestone.

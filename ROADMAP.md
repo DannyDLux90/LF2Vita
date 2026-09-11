@@ -6,6 +6,8 @@ The project keeps version **0.69** as the active hardware-test branch while the 
 
 Goal: make stock Little Fighter 2 2.00a gameplay behave as closely as practical to the PC version on Vita. Work includes fighter state/command fidelity, hidden characters, weapons and consumables, hit/rest/defense rules, catches/throws, AI target behavior, Stage progression/corpses, transformations, projectiles, background behavior, and hardware-log regression testing.
 
+Current fix3 work also includes Stage party setup (P1 + selectable COM companions) and whole-roster special-command audits.
+
 Exit criterion: no known high-impact mismatch in ordinary stock VS/Stage play, and the remaining differences are documented in `PC_FIDELITY_AUDIT.md`.
 
 ## Next milestone 1 — Network play

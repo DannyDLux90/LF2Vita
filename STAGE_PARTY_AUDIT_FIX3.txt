@@ -1,0 +1,12 @@
+PASS LF2_STAGE_MAX_ALLIES=7
+PASS LF2_STAGE_ENEMY_SLOTS=7
+PASS LF2_MAX_ACTORS formula
+PASS ally selector reaches 7
+PASS separate enemy pool
+PASS stage actor total
+PASS enemy fill bounded by enemy pool
+PASS phase settled checks enemy pool
+PASS draw supports dynamic stage actor count
+PASS fighter vrest supports all actors
+PASS object target arrays support all actors
+CAPACITY party=8 enemies=7 total=15

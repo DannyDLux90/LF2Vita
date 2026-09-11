@@ -59,3 +59,16 @@ The packed LF2 2.00a DAT set used for this build contains 5,868 frames, 5,042 `b
 - Splits Vita special shortcuts: △ selects attack-special command roots and R selects jump-special roots, with directional variants and DAT-driven fallbacks. This covers hidden characters such as Firzen and Jan that do not expose `hit_Fa` as their primary command.
 - Stage CPU slots may still be reused immediately at HP=0, but a shared-texture corpse snapshot is retained in the world so defeated enemies no longer disappear when the next wave occupies the logical slot.
 - Current milestone is PC gameplay fidelity. Network play, server browser, PC-compatible networking, and trophies (disabled for cheat-mode sessions) are tracked as subsequent milestones in `ROADMAP.md`.
+
+
+## fix3 — hardware correction and full special audit
+
+- Item throw ownership is now locked for fighter frames 45–54 until the authored `wpoint` release frame fires. This prevents bottle drinking or ordinary held-item input from replacing a throw that has already started.
+- Stage-mode projectiles use the current scrolling world bounds instead of the old fixed 960-pixel VS arena. Firzen beam/ball objects and every other projectile can therefore remain alive beyond x=1140.
+- Type-3 projectile `hit_a`/`hit_d` timing and authored `hit_j` Z movement are handled, including the stock chase/expiry patterns used by Dennis, Woody, Davis, Jan, Firzen and Julian.
+- Engine-side stock `hit_Fa` activators used by Jan, Bat, Firzen and Julian are implemented, including Jan Angel regeneration.
+- John-style ITR kind 9 projectile reflection and Freeze ITR kind 14 solid blocking have first-pass native runtime behavior.
+- Special command links authored on non-neutral/action frames can execute while that action is active. The fix3 audit covers 23 stock fighters, 71 neutral command roots and 85 unique authored command links in total.
+- Stage Mode now offers 0–7 selectable COM companions after P1 selection. Companions stay on Team 1, reserve their fighter slots across waves, use the same preloaded asset cache, and carry HP/MP between major Stage sections. Stage enemies use a separate seven-actor pool, so even a full P1+7 COM party still has seven live enemy slots; larger authored waves continue to queue through those enemy slots.
+- Startup file verification is visually quieter: the translucent progress panel/frame is removed, leaving only a small two-pixel progress line and compact status text.
+- Runtime/log identification is `0.69 fix3`; the Vita package version remains `00.69`.

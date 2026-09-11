@@ -4,7 +4,7 @@ Native PS Vita work-in-progress port using Little Fighter 2 2.00a data supplied 
 
 ## v0.69 hardware-test focus
 
-v0.69 is the active PC-fidelity milestone. Item pickup remains on **L**; **L+□** is an explicit Vita throw command that still runs the stock LF2 throw frames. Milk/Beer now use their authored drink-time units instead of `weapon_hp`, hidden-character shortcuts resolve the actual DAT command families, and Stage slot reuse preserves a persistent corpse snapshot so the next wave can start immediately without visually deleting defeated enemies.
+v0.69 fix3 is the active PC-fidelity hardware-test milestone. Item pickup remains on **L**; **L+□** is an explicit Vita throw command that still runs the stock LF2 throw frames. Milk/Beer now use their authored drink-time units instead of `weapon_hp`, hidden-character shortcuts resolve the actual DAT command families, and Stage slot reuse preserves a persistent corpse snapshot so the next wave can start immediately without visually deleting defeated enemies.
 
 - Original title/menu music now loops through the existing 48 kHz Vita mixer. The local build converts `bgm/main.wma` to PCM WAV ahead of time; no WMA decoder runs on the Vita.
 - Melee and projectile contact now trigger LF2-style impact sounds instead of relying only on attack-frame sounds.
@@ -50,3 +50,8 @@ New 0.69 diagnostics include `HIT` reaction data, `AI ... skill frame=...`, titl
 ## Current limitations
 
 The combat engine is still a native reimplementation rather than the Windows LF2 binary. v0.69 adds first-pass native catch/throw, weapon throwing and rest timing, but exact hitlag/defend-break/armor, dark-red recoverable HP, rare ITR/cpoint cases, CPU item strategy and per-weapon durability/drop rules still need fidelity work. The complete Stage reserve/conditional-directive set and full original `bg.dat` layer/parallax renderer remain incomplete. Rudolf/Louis/Firzen transformations still need hardware edge-case testing. Playback Recording lacks the deterministic `.lfr` event-stream decoder. Network Play remains a menu/protocol scaffold in 0.69; Vita Ad-Hoc discovery/transport and the exact original PC lockstep protocol are not implemented.
+
+
+### v0.69 fix3 test focus
+
+fix3 locks authored item throw chains through their actual release frame, removes the obsolete fixed-arena projectile cutoff from Stage Mode, audits every stock fighter special-command graph, implements additional type-3/ITR engine rules, and enables **0–7 selectable COM companions in Stage Mode**. The companion slots are Team 1 and persist across authored waves; Stage enemies use a separate seven-actor pool so a full P1+7 COM party still has seven live enemy slots. The startup integrity-check UI is intentionally minimal: no translucent frame/panel, only a thin progress line.

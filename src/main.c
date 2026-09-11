@@ -1,7 +1,11 @@
-/* LF2Vita v0.69 generated runtime split. */
-#include "runtime69/main_01.inc"
-#include "runtime69/main_02.inc"
-#include "runtime69/main_03.inc"
-#include "runtime69/main_04a.inc"
-#include "runtime69/main_04b.inc"
-#include "runtime69/main_04c.inc"
+/* LF2Vita v0.69 fix3 generated runtime split. */
+#include "fix3/main_01.inc"
+#include "fix3/main_02.inc"
+#include "fix3/main_03.inc"
+#include "fix3/main_04.inc"
+#include "fix3/main_05.inc"
+#include "fix3/main_06.inc"
+#include "fix3/main_07.inc"
+#include "fix3/main_08.inc"
+#include "fix3/main_09.inc"
+#include "fix3/main_10.inc"

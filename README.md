@@ -44,3 +44,8 @@ See [README_VITA.md](README_VITA.md) for controls, diagnostics and remaining eng
 ## 0.69 PC-fidelity combat pass
 
 v0.69 adds PC-style weapon throw frame/release behavior, parsed `weapon_strength_list`, LF2-style `arest`/per-target `vrest`, first-pass `cpoint` catch/throw and thrown-body ITR kind 4, heavy-weapon movement, immediate dead Stage-slot reuse, and CPU retreat from a state-14 lying opponent. See `VERSION_0.69.md` and `PC_FIDELITY_AUDIT.md`.
+
+
+## 0.69 fix3
+
+The current hardware-test correction pass fixes item-throw state ownership, scrolling-Stage projectile lifetime, broad stock special-command/runtime coverage, Stage corpse persistence, and Stage party setup. Stage Mode supports one Vita-controlled P1 plus up to seven selectable Team-1 COM companions, with a separate seven-actor enemy pool. `SPECIAL_ATTACK_AUDIT_FIX3.txt` records the static stock-special coverage audit.

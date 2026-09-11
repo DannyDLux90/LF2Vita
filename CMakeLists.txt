@@ -46,7 +46,7 @@ target_link_libraries(lf2vita
   SceDisplay_stub SceGxm_stub SceSysmodule_stub SceCtrl_stub
   ScePgf_stub ScePvf_stub SceCommonDialog_stub SceAppUtil_stub
   SceAppMgr_stub SceIofilemgr_stub SceLibKernel_stub SceAudio_stub
-  SceNet_stub ScePspnetAdhoc_stub SceNetAdhocMatching_stub
+  SceNet_stub SceNetCtl_stub ScePspnetAdhoc_stub SceNetAdhocMatching_stub
 )
 
 vita_create_self(eboot.bin lf2vita UNSAFE)

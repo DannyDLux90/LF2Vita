@@ -1,6 +1,7 @@
 #ifndef LF2_GAME_H
 #define LF2_GAME_H
 #include <stdbool.h>
+#include <stdint.h>
 #include <vita2d.h>
 
 /* LF2 supports eight fighters total. On a Vita we expose one local human
@@ -26,6 +27,31 @@ enum {
     LF2_MATCH_LOSS=2
 };
 
+/* Platform-neutral input bits used by remote/network controllers.  The
+   gameplay runtime converts these to the same input_t used by Vita controls. */
+enum {
+    LF2_REMOTE_LEFT           = 1u << 0,
+    LF2_REMOTE_RIGHT          = 1u << 1,
+    LF2_REMOTE_UP             = 1u << 2,
+    LF2_REMOTE_DOWN           = 1u << 3,
+    LF2_REMOTE_ATTACK         = 1u << 4,
+    LF2_REMOTE_JUMP           = 1u << 5,
+    LF2_REMOTE_DEFEND         = 1u << 6,
+    LF2_REMOTE_PICKUP         = 1u << 7,
+    LF2_REMOTE_SPECIAL_ATTACK = 1u << 8,
+    LF2_REMOTE_SPECIAL_JUMP   = 1u << 9
+};
+
+typedef uint32_t (*lf2_remote_input_fn)(void *userdata);
+typedef bool (*lf2_remote_alive_fn)(void *userdata);
+typedef void (*lf2_remote_frame_fn)(void *userdata);
+/* Stock LF2 networking owns four control slots per machine.  local_held[] is
+   both input and output: the runtime proposes the current Vita controls in
+   slot 0 and the callback may replace them with the stock network clock's
+   latched value (original LF2 samples controls on its network cadence).
+   remote_held[] returns the four slots owned by the other machine. */
+typedef bool (*lf2_lockstep_frame_fn)(void *userdata, uint32_t local_held[4], uint32_t remote_held[4]);
+
 typedef struct {
     const char *name;
     const char *dat;
@@ -46,6 +72,8 @@ typedef struct {
     const char *hud_label;
     /* Stage Mode has no round-over splash between authored waves. */
     bool suppress_result_overlay;
+    /* Freeze the final battlefield and draw the original-style Stage Clear banner. */
+    bool stage_clear_overlay;
     /* Initial state. <=0 selects the regular 500 default. */
     int player_hp;
     int player_max_hp;
@@ -55,6 +83,30 @@ typedef struct {
     /* Optional result state for multi-round modes. */
     int *player_hp_out;
     int *player_mp_out;
+
+    /* Optional authoritative remote-player path.  remote_player_slot is the
+       fighter index inside this match (1 == first slot after P1).  The Vita
+       remains simulation authority; the remote peer contributes only input. */
+    int remote_player_slot;
+    /* Stock LF2 owns four input slots per computer.  For native stock-PC
+       compatibility, map each remote control byte to a fighter actor.  A
+       count of zero keeps the legacy single remote_player_slot behaviour. */
+    int remote_player_count;
+    int remote_player_slots[4];
+    /* Full stock-LF2 input map.  When enabled, actor i uses control code
+       1..4 for this machine's stock slots and 5..8 for the peer's slots;
+       0 leaves that actor under AI control.  This preserves stock actor order
+       even when the Vita is the connecting (slots 5..8) machine. */
+    bool lockstep_actor_map_enabled;
+    uint8_t lockstep_actor_control[LF2_MAX_CPUS+1];
+    lf2_remote_input_fn remote_input;
+    lf2_remote_alive_fn remote_alive;
+    lf2_remote_frame_fn remote_frame_presented;
+    /* Optional original-LF2-compatible blocking input clock.  When set, the
+       runtime disables Vita-only shortcut buttons and advances each gameplay
+       tick only after this callback returns the peer input for that tick. */
+    lf2_lockstep_frame_fn lockstep_frame;
+    void *remote_userdata;
 } lf2_match_options_t;
 
 extern const lf2_roster_entry_t lf2_roster[];

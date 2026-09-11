@@ -165,11 +165,14 @@ Where identified, Vita-only behavior is disabled while stock compatibility is ac
 - a fighter in stock hitlag does not advance normal input, AI decisions, frame animation/physics, hard-coded frame-state processing, catch/item commands, or fighter opoint emission;
 - attacker-side `arest` pauses during attacker hitlag, while per-victim `vrest` continues to count down;
 - `fall` recovery pauses during hitlag, while the confirmed stock `bdefend` decay remains one point per TU;
-- projectile/object contact applies victim hitlag without freezing the owning fighter; this avoids incorrectly giving ordinary type-3 projectiles fighter-style attacker hitlag.
+- projectile/object contact applies victim hitlag without freezing the owning fighter; this avoids incorrectly giving ordinary type-3 projectiles fighter-style attacker hitlag;
+- stock hard-coded character armor is implemented for Louis, Knight and Julian, using the known pre-hit `bdefend` thresholds and the known state/element/object exceptions;
+- armored characters retain armor while caught, but their armor `bdefend` recovery is held for the caught interval;
+- authored `bdefend: 100` bypasses both normal state-7 defense and character armor.
 
 The back-facing exception for negative `dvx` is included in the block test. Airborne or caught state-7 frames do not enter broken-defend even when their counter is above 30.
 
-The stock fall/hitlag code is intentionally limited to lockstep/reference stock mode. Normal Vita/Stage gameplay keeps its previous reaction path.
+The stock fall/hitlag/armor code is intentionally limited to lockstep/reference stock mode. Normal Vita/Stage gameplay keeps its previous reaction path.
 
 Still unresolved inside the hit/fall/state-12 path:
 
@@ -181,25 +184,33 @@ Still unresolved inside the hit/fall/state-12 path:
 
 Result counters are tracked for attack dealt, HP lost, kills, MP used and item picking.
 
-Other important remaining combat mismatches include armor/special defensive characters, the hard-coded `bdefend: 100` weapon/armor behavior, grab/throw accounting, sustained effects, owner attribution, AI/RNG call order, and exact item/object processing order. Do not guess the armor thresholds or the `bdefend: 100` weapon-destruction path without Windows evidence.
+Other important remaining combat mismatches include the `bdefend: 100` weapon-destruction path, grab/throw accounting, sustained effects, owner attribution, AI/RNG call order, and exact item/object processing order. The weapon-destruction case cannot be added as a late object-only shortcut: stock `arest` target selection can make fighter and weapon bodies compete for the same hit, while LF2Vita does not yet have a unified object/fighter target pass. Do not guess that ordering.
 
 ## Build status
 
-The last full clean VitaSDK build was the pre-bdefend tree after the 1-on-1 team normalization. That internal VPK passed `unzip -t` with all ten optional local reference fixtures included.
+`.github/workflows/pc-compat-build.yml` now provides a reproducible branch-only build with the pinned official `vitasdk/vitasdk:2026.08-20260813` container. It configures the complete CMake project, cross-compiles and links the ARM Vita ELF, converts it to VELF, creates `eboot.bin`, verifies those outputs, and uploads a combined source + build-workspace ZIP. The workflow deliberately stops before VPK packaging because `gamepack/game.lf2pak` is generated from a user-provided LF2 2.00a installation and is intentionally not committed.
 
-While continuing from that handoff, the GitHub split was found to contain two source-sync defects that the prior local tree did not expose: `game_21.inc` passed an extra `stock_compat` argument to the existing hit functions, and it called `stock_state_digest()` without a definition in the branch. The bdefend change restores the existing hit-function signatures, scopes stock behavior through the lockstep hit pass, and adds the missing deterministic digest implementation.
+The first real clean CI pass exposed and fixed several GitHub split/source-sync defects that host-only harnesses had not caught:
 
-The bdefend/digest helper path, stock fall reactions and stock hitlag timing have been exercised with strict host-side C syntax/semantic harnesses (`-std=c11 -Wall -Wextra -Werror`). The hitlag harness covers 3-TU attacker freeze, 3-TU normal-victim freeze, 5-TU defended-victim freeze, attacker `arest` pause, continuing `vrest`/`bdefend` decay, paused `fall` recovery and the KO path without double-decrementing shaking.
+- `net_ui_03c.inc` repeated the tail of the AdHoc browser input block already present in `net_ui_03b.inc`, leaving an orphaned `else` and invalid scope;
+- `game_02.inc` crosses the middle of `start_attack()`, so stock wrappers are now compiled through exact prefix/suffix slices and inserted only at a verified top-level C boundary;
+- the stock lockstep key adapter helpers are explicitly present again before the match loop;
+- the deterministic stock digest is included at a top-level boundary rather than inside the split `lf2_run_match_ex()` body;
+- `lf2_roster_from_original_id()` is exported for the replay-reference translation unit instead of existing only as the internal static mapper.
 
-A **fresh full VitaSDK compile plus deterministic fixture run is still required** for the current tree. The uploaded SDK packages are available, but this session does not have a complete local repository checkout to link the application from. Therefore this remains an engineering branch, **not** the next user hardware-test VPK.
+A clean GitHub Actions run now passes checkout, toolchain setup, CMake configure, all C compilation, ARM link, VELF conversion, SELF creation, output verification and source/workspace artifact packaging. A full VPK can be assembled outside the repository by combining that verified `eboot.bin` with the user's locally generated/provided `game.lf2pak`; the proprietary game pack remains outside GitHub.
+
+The bdefend/digest helper path, stock fall reactions, stock hitlag timing and armor rules have also been exercised with strict host-side C syntax/semantic harnesses (`-std=c11 -Wall -Wextra -Werror`). The hitlag harness covers 3-TU attacker freeze, 3-TU normal-victim freeze, 5-TU defended-victim freeze, attacker `arest` pause, continuing `vrest`/`bdefend` decay, paused `fall` recovery and the KO path without double-decrementing shaking.
+
+The **deterministic non-Stage fixture run is still required** for the current tree. Those fixtures are local/game-derived and are intentionally not redistributed through the public CI artifact. A green compiler/SELF build therefore proves toolchain/build integrity, not Windows-LF2 simulation parity. This remains an engineering branch rather than a compatibility-complete release.
 
 ## Next engineering tasks
 
-1. Clean-build the current GitHub tree and run the deterministic non-Stage fixtures; use `REFCMP`/`STOCK` to identify the first reproducible simulation divergence.
+1. Run the deterministic non-Stage fixtures against the clean current build; use `REFCMP`/`STOCK` to identify the first reproducible simulation divergence.
 2. Finish exact hitlag momentum accumulation/deceleration and State-12 185/191 bounce behavior.
-3. Resolve armor/special defensive characters and the `bdefend: 100` bypass/weapon behavior from Windows evidence rather than approximation.
+3. Implement the `bdefend: 100` weapon-destruction case only together with the stock-compatible unified fighter/weapon target-selection order.
 4. Finish exact result/stat accounting for status/self/grab/throw paths.
 5. Implement the stock 1-on-1 and 2-on-2 Championship menu/bracket state machines without assuming unverified timing.
 6. Map the opaque packet health/state checksum from a real Windows capture.
 7. Implement Stage/Battle/Demo stock network state machines.
-8. Only then issue the next hardware-test VPK for an unmodified Windows LF2 2.00a peer.
+8. Only after simulation/network parity is demonstrated should a build be treated as a compatibility-complete Windows-LF2 hardware-test release.

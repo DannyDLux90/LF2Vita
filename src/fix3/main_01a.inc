@@ -1,5 +1,10 @@
 #include <psp2/apputil.h>
 #include <psp2/ctrl.h>
+#include <psp2/touch.h>
+#include <psp2/net/netctl.h>
+#include <psp2/netcheck_dialog.h>
+#include <psp2/ime_dialog.h>
+#include <psp2/sysmodule.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/types.h>
@@ -15,10 +20,13 @@
 #include "filecheck.h"
 #include "game.h"
 #include "lf2_data.h"
+#include "lf2_rng.h"
+#include "replay_ref.h"
 #include "stage_data.h"
 #include "log.h"
 #include "ui_font.h"
 #include "net70/adhoc_net.h"
+#include "net70/pc_net.h"
 
 #define SCREEN_W 960
 #define SCREEN_H 544

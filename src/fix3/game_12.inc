@@ -95,16 +95,64 @@ static void stock_note_unblocked_hit(fighter_t *b){
     if(g_runtime_stock_compat&&b)b->bdefend_points=45;
 }
 
+/* Stock fall meter categories are hard-coded around 20/40/60. Keep the
+   existing Vita reaction path untouched outside lockstep/reference mode. */
 static void apply_hit_reaction(fighter_t *b,int attacker_facing,const lf2_itr_def_t *it){
-    if(!b||!it)return;int fall=it->fall?it->fall:20;if(fall>0)b->fall_points+=fall;
-    int reaction=220;bool airborne=b->y<0.0f||b->vy!=0.0f;
-    if(b->hp<=0||fall>60||b->fall_points>60){reaction=180;b->falling=true;b->fall_points=0;}
-    else if(airborne&&fall>20){reaction=180;b->falling=true;}
-    else if(b->fall_points>40){reaction=b->def.frames[226].present?226:220;b->fall_points=60;}
-    else if(b->fall_points>20){bool from_front=(b->facing!=(attacker_facing?1:0));reaction=from_front&&b->def.frames[222].present?222:(b->def.frames[224].present?224:220);b->fall_points=40;}
-    else if(fall<0)return;else b->fall_points=20;
+    if(!b||!it)return;
+    if(!g_runtime_stock_compat){
+        int fall=it->fall?it->fall:20;if(fall>0)b->fall_points+=fall;
+        int reaction=220;bool airborne=b->y<0.0f||b->vy!=0.0f;
+        if(b->hp<=0||fall>60||b->fall_points>60){reaction=180;b->falling=true;b->fall_points=0;}
+        else if(airborne&&fall>20){reaction=180;b->falling=true;}
+        else if(b->fall_points>40){reaction=b->def.frames[226].present?226:220;b->fall_points=60;}
+        else if(b->fall_points>20){bool from_front=(b->facing!=(attacker_facing?1:0));reaction=from_front&&b->def.frames[222].present?222:(b->def.frames[224].present?224:220);b->fall_points=40;}
+        else if(fall<0)return;else b->fall_points=20;
+        set_frame(b,reaction);
+        float push=(float)(it->dvx?it->dvx:3);b->vx=(attacker_facing?-push:push);
+        if(it->dvy)b->vy=(float)it->dvy;else if(b->falling)b->vy=-7.5f;
+        b->hit_flash=5;
+        return;
+    }
+
+    int fall=it->fall?it->fall:20;
+    bool airborne=b->y<0.0f||b->vy!=0.0f;
+    bool from_front=(b->facing!=(attacker_facing?1:0));
+    float push=(float)(it->dvx?it->dvx:3);
+
+    /* Stock fall < 0 explicitly suppresses injury frames while retaining the
+       authored push/vertical velocity carried by the hit. */
+    if(fall<0){
+        b->vx=(attacker_facing?-push:push);
+        if(it->dvy)b->vy=(float)it->dvy;
+        b->hit_flash=5;
+        return;
+    }
+
+    if(fall>0)b->fall_points+=fall;
+    int reaction=220;
+    if(b->hp<=0||fall>60||b->fall_points>60){
+        reaction=from_front?180:186;
+        if(!b->def.frames[reaction].present)reaction=b->def.frames[180].present?180:186;
+        b->falling=true;
+        b->fall_points=0;
+    }else if(airborne&&b->fall_points>20){
+        reaction=from_front?180:186;
+        if(!b->def.frames[reaction].present)reaction=b->def.frames[180].present?180:186;
+        b->falling=true;
+    }else if(airborne){
+        reaction=from_front&&b->def.frames[222].present?222:(b->def.frames[224].present?224:220);
+        b->fall_points=40;
+    }else if(b->fall_points>40){
+        reaction=b->def.frames[226].present?226:220;
+        b->fall_points=60;
+    }else if(b->fall_points>20){
+        reaction=from_front&&b->def.frames[222].present?222:(b->def.frames[224].present?224:220);
+        b->fall_points=40;
+    }else{
+        b->fall_points=20;
+    }
     set_frame(b,reaction);
-    float push=(float)(it->dvx?it->dvx:3);b->vx=(attacker_facing?-push:push);
+    b->vx=(attacker_facing?-push:push);
     if(it->dvy)b->vy=(float)it->dvy;else if(b->falling)b->vy=-7.5f;
     b->hit_flash=5;
 }

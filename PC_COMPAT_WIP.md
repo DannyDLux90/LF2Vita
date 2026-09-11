@@ -141,7 +141,7 @@ The hidden/internal replay path is now implemented for non-Stage fixtures:
 
 Stage replay execution is deliberately deferred until the Stage runtime can reproduce the stock recording state without inventing missing semantics.
 
-The stock runtime logs a deterministic scalar state digest at TU 1 and every 30 TUs, including RNG indices/call count. `src/fix3/game_stock_diag.inc` hashes explicit scalar fields only (not pointers/padding) and includes the separate `bdefend` counter. This will be used to locate the first divergence once comparable Windows checkpoints are available.
+The stock runtime logs a deterministic scalar state digest at TU 1 and every 30 TUs, including RNG indices/call count. `src/fix3/game_stock_diag.inc` hashes explicit scalar fields only (not pointers/padding) and includes the separate `bdefend` counter. The stock-only hitlag layer extends this digest with each fighter's signed shaking value. This will be used to locate the first divergence once comparable Windows checkpoints are available.
 
 ## Combat parity already changed in stock mode
 
@@ -160,15 +160,21 @@ Where identified, Vita-only behavior is disabled while stock compatibility is ac
 - `fall < 0` suppresses the normal injury-frame transition while retaining authored push/vertical velocity;
 - stock fall reactions use the 20/40/60 meter categories, including directional 222/224 injury2 frames and directional 180/186 falling entry;
 - airborne hits at or below the low-fall category enter 222/224, while an airborne victim whose accumulated fall exceeds 20 enters the falling sequence;
-- type-0 falling frames are trajectory-driven in stock mode instead of cycling 180..191 as an animation: the already selected 180-series or 186-series is mapped from vertical velocity using `< -10`, `< 0`, `< 6`, and `>= 6` bands.
+- type-0 falling frames are trajectory-driven in stock mode instead of cycling 180..191 as an animation: the already selected 180-series or 186-series is mapped from vertical velocity using `< -10`, `< 0`, `< 6`, and `>= 6` bands;
+- stock local hitlag/shaking is represented independently of `fighter_t`: direct fighter/held-weapon attackers freeze for 3 TU, normally hit victims for 3 TU, and defended victims for 5 TU;
+- a fighter in stock hitlag does not advance normal input, AI decisions, frame animation/physics, hard-coded frame-state processing, catch/item commands, or fighter opoint emission;
+- attacker-side `arest` pauses during attacker hitlag, while per-victim `vrest` continues to count down;
+- `fall` recovery pauses during hitlag, while the confirmed stock `bdefend` decay remains one point per TU;
+- projectile/object contact applies victim hitlag without freezing the owning fighter; this avoids incorrectly giving ordinary type-3 projectiles fighter-style attacker hitlag.
 
 The back-facing exception for negative `dvx` is included in the block test. Airborne or caught state-7 frames do not enter broken-defend even when their counter is above 30.
 
-The new fall code is intentionally limited to lockstep/reference stock mode. Normal Vita/Stage gameplay keeps its previous reaction path.
+The stock fall/hitlag code is intentionally limited to lockstep/reference stock mode. Normal Vita/Stage gameplay keeps its previous reaction path.
 
-Still unresolved inside the fall/state-12 path:
+Still unresolved inside the hit/fall/state-12 path:
 
-- exact hitlag interaction: public reverse-engineering indicates meter recovery should freeze during hitlag, while the current Vita counters still decay unconditionally once per TU;
+- exact hitlag momentum behavior: Windows accumulates attacker/victim momentum during normal hitlag and appears to decelerate it during defend hitlag; this is deliberately not approximated yet;
+- exact object-local hitshake/frame transitions for every non-character object class;
 - exact ground-bounce behavior and velocity constants for falling frames 185/191;
 - `fall: 80` and other hard-coded/special fall cases;
 - effect/weapon special cases that reinterpret negative fall values.
@@ -183,16 +189,17 @@ The last full clean VitaSDK build was the pre-bdefend tree after the 1-on-1 team
 
 While continuing from that handoff, the GitHub split was found to contain two source-sync defects that the prior local tree did not expose: `game_21.inc` passed an extra `stock_compat` argument to the existing hit functions, and it called `stock_state_digest()` without a definition in the branch. The bdefend change restores the existing hit-function signatures, scopes stock behavior through the lockstep hit pass, and adds the missing deterministic digest implementation.
 
-The bdefend/digest helper path and the new stock fall reaction logic were exercised with strict host-side C syntax/semantic harnesses (`-Wall -Wextra -Werror`). The fall harness covers grounded low fall, airborne low fall, airborne knockdown, negative fall without injury-frame transition, and backward high-fall entry.
+The bdefend/digest helper path, stock fall reactions and stock hitlag timing have been exercised with strict host-side C syntax/semantic harnesses (`-std=c11 -Wall -Wextra -Werror`). The hitlag harness covers 3-TU attacker freeze, 3-TU normal-victim freeze, 5-TU defended-victim freeze, attacker `arest` pause, continuing `vrest`/`bdefend` decay, paused `fall` recovery and the KO path without double-decrementing shaking.
 
 A **fresh full VitaSDK compile plus deterministic fixture run is still required** for the current tree. The uploaded SDK packages are available, but this session does not have a complete local repository checkout to link the application from. Therefore this remains an engineering branch, **not** the next user hardware-test VPK.
 
 ## Next engineering tasks
 
 1. Clean-build the current GitHub tree and run the deterministic non-Stage fixtures; use `REFCMP`/`STOCK` to identify the first reproducible simulation divergence.
-2. Finish State 12 with exact hitlag/recovery and 185/191 bounce behavior, then resolve armor and the special `bdefend: 100` path from Windows evidence rather than approximation.
-3. Finish exact result/stat accounting for status/self/grab/throw paths.
-4. Implement the stock 1-on-1 and 2-on-2 Championship menu/bracket state machines without assuming unverified timing.
-5. Map the opaque packet health/state checksum from a real Windows capture.
-6. Implement Stage/Battle/Demo stock network state machines.
-7. Only then issue the next hardware-test VPK for an unmodified Windows LF2 2.00a peer.
+2. Finish exact hitlag momentum accumulation/deceleration and State-12 185/191 bounce behavior.
+3. Resolve armor/special defensive characters and the `bdefend: 100` bypass/weapon behavior from Windows evidence rather than approximation.
+4. Finish exact result/stat accounting for status/self/grab/throw paths.
+5. Implement the stock 1-on-1 and 2-on-2 Championship menu/bracket state machines without assuming unverified timing.
+6. Map the opaque packet health/state checksum from a real Windows capture.
+7. Implement Stage/Battle/Demo stock network state machines.
+8. Only then issue the next hardware-test VPK for an unmodified Windows LF2 2.00a peer.

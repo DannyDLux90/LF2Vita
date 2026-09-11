@@ -64,6 +64,22 @@
         if(stage->ally_hp_out)stage->ally_hp_out[i]=fighters[i+1].active?fighters[i+1].hp:0;
         if(stage->ally_mp_out)stage->ally_mp_out[i]=fighters[i+1].active?fighters[i+1].mp:0;
     }
+
+    memset(&g_last_stage_summary,0,sizeof(g_last_stage_summary));
+    int summary_count=1+ally_count;if(summary_count>LF2_STAGE_SUMMARY_MAX_PLAYERS)summary_count=LF2_STAGE_SUMMARY_MAX_PLAYERS;
+    g_last_stage_summary.participant_count=summary_count;
+    for(int i=0;i<summary_count;i++){
+        fighter_t *f=&fighters[i];
+        g_last_stage_summary.roster[i]=f->roster_idx;
+        g_last_stage_summary.kills[i]=f->stat_kills;
+        g_last_stage_summary.attack[i]=f->stat_attack;
+        g_last_stage_summary.hp_lost[i]=f->stat_hp_lost;
+        g_last_stage_summary.mp_usage[i]=f->stat_mp_usage;
+        g_last_stage_summary.picking[i]=f->stat_picking;
+        g_last_stage_summary.hp[i]=f->hp;
+        g_last_stage_summary.mp[i]=f->mp;
+    }
+
     lf2_log_stage("stage:continuous_end","result=%d phase=%d/%d hp=%d mp=%d camera=%.1f",
                   result,phase+1,stage->phase_count,fighters[0].hp,fighters[0].mp,g_camera_x);
     vita2d_wait_rendering_done();

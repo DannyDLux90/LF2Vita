@@ -1,27 +1,41 @@
 # LF2Vita roadmap
 
-The project keeps version **0.69** as the active hardware-test branch while the current milestone is completed. Milestones are ordered deliberately: gameplay/state determinism comes before networking, because PC-compatible lockstep is not meaningful until the native simulation is stable.
+## Completed foundation — 0.69 / fix3
 
-## Current milestone — PC gameplay fidelity / optimization
+The 0.69 line concentrated on PC LF2 2.00a gameplay fidelity: combat/rest rules, weapon use/throwing, catches/throws, special-command coverage, Stage corpse behavior, scrolling projectiles and one human player plus up to seven Stage COM allies. `PC_FIDELITY_AUDIT.md` remains the backlog for remaining gameplay mismatches.
 
-Goal: make stock Little Fighter 2 2.00a gameplay behave as closely as practical to the PC version on Vita. Work includes fighter state/command fidelity, hidden characters, weapons and consumables, hit/rest/defense rules, catches/throws, AI target behavior, Stage progression/corpses, transformations, projectiles, background behavior, and hardware-log regression testing.
+The user's fix3 hardware log confirms the seven-allies Stage configuration reaches the live Stage simulation; hardware testing continues whenever gameplay regressions are reported.
 
-Current fix3 work also includes Stage party setup (P1 + selectable COM companions) and whole-roster special-command audits.
+## Current milestone — 0.7X Vita multiplayer
 
-Exit criterion: no known high-impact mismatch in ordinary stock VS/Stage play, and the remaining differences are documented in `PC_FIDELITY_AUDIT.md`.
+### 0.70 — Vita-to-Vita AdHoc discovery and lobby
 
-## Next milestone 1 — Network play
+Build the transport and lobby independently of combat synchronization:
 
-Stabilize deterministic 30 Hz input/state synchronization, checksums and Vita peer transport. Initial networking may target Vita-to-Vita/LAN or Ad-Hoc play before public discovery.
+- Network Play selector: **Online / AdHoc**.
+- Real Vita AdHoc session discovery.
+- Server browser with host/profile avatar cell, current/max players, status, game mode and five-bar measured connection quality.
+- Host creation flow.
+- Join/leave handling.
+- Up to eight lobby players.
+- Per-player LF2 character and ready state.
+- Host settings synchronized live to every client.
+- Useful `NET` diagnostics for two-device testing.
 
-## Next milestone 2 — Server browser
+The first 0.70 test build intentionally does not start a network match yet.
 
-Add session discovery/listing, host metadata, refresh/filter/join flow and clear connection/error states on top of the network transport.
+### Next 0.7X step — AdHoc gameplay lockstep
 
-## Next milestone 3 — PC-compatible network play
+Synchronize the existing 30 Hz native simulation between Vitas: common seed/start tick, input frames, state checksums, disconnect handling and lobby→match→results→lobby transitions. This is the point at which Vita-to-Vita becomes actually playable.
 
-Reproduce the original LF2 2.00a network framing/synchronization closely enough for Vita-to-PC interoperability. This requires protocol capture/reverse engineering and explicit cross-platform desync testing; it is separate from the Vita-native network path.
+### Following 0.7X step — Online transport and Internet server browser
 
-## Next milestone 4 — Trophies
+Reuse the lobby/game protocol over an Internet-capable discovery/connection layer. Add public/private session metadata, refresh/filter/join and robust NAT/relay/error handling as needed.
 
-Add trophy definitions and unlock tracking only after gameplay and networking behavior are stable. **Any session launched in LF2.NET/cheat mode is trophy-ineligible**, and achievements must not unlock from cheat-mode progress.
+### Later 0.7X step — PC-compatible network play
+
+Reverse engineer and reproduce LF2 2.00a's original networking closely enough for Vita-to-PC interoperability, with explicit cross-platform desync tests.
+
+## Later milestone — Trophies
+
+Add trophy definitions and unlock tracking only after gameplay/network behavior is stable. **LF2.NET / cheat-mode sessions are trophy-ineligible** and must never unlock achievements.

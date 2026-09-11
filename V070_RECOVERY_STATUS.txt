@@ -1,0 +1,36 @@
+LF2Vita 0.70 recovery checkpoint
+Date: 2026-09-11
+Repository: DannyDLux90/LF2Vita
+Baseline before 0.70: a615202874694421b93f5f6b0555dbaa6c2913fd (0.69 fix3)
+Package version: 00.70
+Milestone: 0.7X Vita multiplayer, first transport AdHoc
+
+IMPLEMENTED AND CLEAN-CROSS-BUILT
+- Larger readable startup/filecheck progress bar (750x24), resource category + exact path + count/percent.
+- Network Play selector: Online (later) / AdHoc (active).
+- Vita AdHoc Matching parent/child discovery, join/leave/timeout and synchronized lobby state.
+- Server browser columns: Host/profile cell, players current/max, status, game mode, ping-based 5 bars.
+- CS-1.6-style browser filters: game mode, status, free slots, maximum ping.
+- Hard compatibility gate: only LF2 2.00a + LF2Vita 0.70 sessions enter the browser list.
+- Browser header permanently shows LF2 2.00a and LF2Vita 0.70.
+- Join packet repeats both versions; host rejects mismatched clients.
+- Create-new-AdHoc-game entry below browser.
+- Lobby shows players, LF2 character/portrait, avatar/profile fallback, ready state.
+- Host-authoritative synchronized mode/max players/stage/difficulty/status revisions.
+- Probe RTT does not count as a joined lobby player.
+- Explicit selected-host address, unique peer ID, clean network shutdown and NET diagnostics.
+
+INTENTIONALLY NOT YET COMPLETE
+- Deterministic network combat/30 Hz lockstep; START only validates lobby and moves to Starting state.
+- Real PSN avatar image transfer/cache (profile identity/fallback cell exists).
+- Online/internet discovery.
+- PC-compatible LF2 2.00a networking.
+- Trophies.
+
+SOURCE FORM
+- /mnt/data/lf2v070_release is the compact release/recovery source form.
+- It was rebuilt clean with VitaSDK through ELF -> VELF -> SELF -> VPK after all version/filter changes.
+- V070_HANDOFF.md is the primary handoff for a new ChatGPT conversation.
+
+NEXT HARDWARE TEST
+Use two Vitas with the same 0.70 VPK. Verify browser discovery, displayed versions, filters, player count, ping bars, join, character/ready sync, host setting changes, leave/rejoin. Save lf2.log from both Vitas.

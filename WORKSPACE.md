@@ -1,6 +1,6 @@
 # LF2Vita development workspace
 
-This repository tracks the current source/build workspace for the PS Vita port. Hardware-test version: **0.69**.
+This repository tracks the current source/build workspace for the PS Vita port. Hardware-test version: **0.70**.
 
 ## Directory layout
 

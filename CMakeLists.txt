@@ -13,7 +13,7 @@ include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "Little Fighter 2 Vita")
 set(VITA_TITLEID "LF2V00001")
-set(VITA_VERSION "00.69")
+set(VITA_VERSION "00.70")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -36,6 +36,7 @@ add_executable(lf2vita
   src/lf2_data.c
   src/stage_data.c
   src/lf2_core.c
+  src/net70/adhoc_net.c
 )
 
 target_include_directories(lf2vita PRIVATE src)
@@ -45,6 +46,7 @@ target_link_libraries(lf2vita
   SceDisplay_stub SceGxm_stub SceSysmodule_stub SceCtrl_stub
   ScePgf_stub ScePvf_stub SceCommonDialog_stub SceAppUtil_stub
   SceAppMgr_stub SceIofilemgr_stub SceLibKernel_stub SceAudio_stub
+  SceNet_stub ScePspnetAdhoc_stub SceNetAdhocMatching_stub
 )
 
 vita_create_self(eboot.bin lf2vita UNSAFE)

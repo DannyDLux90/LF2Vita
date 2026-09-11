@@ -4,63 +4,29 @@ Branch: `pc-compat-wip`
 
 Goal: LF2Vita must interoperate with an **unmodified Little Fighter 2 v2.00a for Windows** over the original TCP network mode. The companion/streaming PC client is diagnostic only and is not the target architecture.
 
-## Continuity / exact local source snapshot
+`main` stays stable. Continue PC compatibility work on this branch.
 
-The branch now contains an exact compressed snapshot of the important local WIP source files at:
+## Current stock transport
 
-`wip/pc-compat-source-snapshot.tar.gz.b64`
-
-Decode it with:
-
-```sh
-base64 -d wip/pc-compat-source-snapshot.tar.gz.b64 > /tmp/pccompat.tar.gz
-tar -xzf /tmp/pccompat.tar.gz
-```
-
-Decoded tar SHA-256:
-
-`66a9c876471122e7ece481f06a021ff5cd906fc7d94ae60f4f9f49a0c1d5f893`
-
-This snapshot exists specifically so a new chat/developer can recover the exact local WIP even while some large split `.inc` integrations are still being normalized into regular branch files.
-
-## Current original-LF2 transport
-
-`src/net70/pc_net.c` implements the stock TCP/12345 path.
-
-Handshake implemented:
+`src/net70/pc_net.c` implements the original TCP/12345 path:
 
 1. 14-byte `u can connect\0` banner.
 2. 77-byte player/slot identity block in each direction.
-3. 3001-byte shared random table from host to client.
+3. 3001-byte shared random block from host to client.
 4. Repeating 22-byte lockstep packets.
 
 Control ownership follows stock LF2:
 
-- Host / "Waiting for opponent": global control slots 1..4.
-- Client / "Connect to opponent": global control slots 5..8.
+- host / `Waiting for opponent`: global controls 1..4;
+- client / `Connect to opponent`: global controls 5..8.
 
-Known key-byte bits:
+Known key bits: baseline `0x01`, defend `0x02`, jump `0x04`, attack `0x08`, right `0x10`, left `0x20`, up `0x40`, down `0x80`.
 
-- bit 0 (`0x01`) is the stock network baseline bit.
-- defend `0x02`
-- jump `0x04`
-- attack `0x08`
-- right `0x10`
-- left `0x20`
-- up `0x40`
-- down `0x80`
+Host keys are packet bytes 4..7 and client keys are 8..11. Opaque bytes 0..3 and 12..21 are preserved instead of fabricated and are logged when they change. Public reverse-engineering discussion indicates that one undocumented field, possibly byte 14 depending on indexing, is a health/state checksum involved in LF2's out-of-sync detection. Its algorithm is still unknown and must be mapped from a real stock-PC capture rather than guessed.
 
-The four host keys are bytes 4..7 and the four client keys are bytes 8..11 of the 22-byte packet. Other bytes are deliberately preserved rather than guessed. Diagnostics count/log changes of opaque bytes 0..3 and 12..21.
+## Clock and RNG
 
-Public reverse-engineering discussion says one undocumented field, possibly packet byte 14 depending on indexing, is a **health/state checksum** and is what raises the out-of-sync error. Its algorithm is still unknown. Do **not** freeze or fabricate it as a final compatibility solution; preserve it until it is mapped from a real stock-PC capture.
-
-## Network clock
-
-The stock network exchange is **15 Hz**, while the game simulation is **30 Hz**. One 22-byte exchange is latched for two game time units. `lf2_pc_stock_clock_step()` is called once per 30 Hz TU and performs a network exchange only on the first TU of each pair.
-
-This is independently confirmed by the stock `.lfr` input table: one 20-byte recording input record corresponds exactly to two 30 Hz game TUs.
-
-## Original RNG
+The original network exchange is **15 Hz** while the game simulation is **30 Hz**. One network sample is held for two game TUs. The stock `.lfr` recordings independently confirm exactly the same 2-TU cadence.
 
 `src/lf2_rng.c` implements the reverse-engineered v2.00a random routine:
 
@@ -70,155 +36,137 @@ j = (j + 1) % 3000
 random(range) = (i + table[j]) % range
 ```
 
-`table` is the first 3000 bytes of the 3001-byte handshake block. Both indices start at zero. Gameplay RNG call sites used by the Vita runtime have been routed through `lf2_rng_mod()` where identified. When stock mode is inactive it falls back to regular Vita RNG behavior.
+The table is the first 3000 bytes of the shared random block. Client mode therefore uses the exact table supplied by Windows LF2. Host-side generation of the 3001-byte block is deterministic but the exact Windows generator for that block is not yet proven.
 
-Client mode therefore uses the exact table received from Windows LF2. Host mode currently generates a deterministic shared table but the exact Windows table-generator algorithm is not yet proven.
+## Stock menu state
 
-## Stock game/menu state
+Implemented:
 
-Implemented locally so far:
-
-- stock Game Mode screen driven by the original input clock;
-- VS mode join / fighter / team / confirm flow;
+- original-clock Game Mode selection;
+- VS join / fighter / team / confirm flow;
 - CPU count and CPU fighter/team selection;
 - VS options and match launch;
-- four local + four remote control-slot mapping into the Vita match runtime.
+- four local + four remote stock control slots mapped into actor order.
 
-Still incomplete:
+Still required:
 
-- Stage mode network state machine;
-- 1 on 1 / 2 on 2 championships;
-- Battle mode;
-- Demo mode;
-- exact parity of all combat/state/checksum behavior.
+- Stage network state machine;
+- 1-on-1 Championship state machine;
+- 2-on-2 Championship state machine;
+- Battle network state machine;
+- Demo network state machine;
+- exact combat/state/checksum parity.
 
-Do not call this test-ready stock compatibility yet.
+The official game description confirms that Championship is a tournament mode and supports solo or partner play; this is useful for semantics but not enough to assume exact menu timing/state transitions. Those must remain synchronized with the Windows executable.
 
-## Exact `.lfr` decoder
+## `.lfr` decoder and reference data
 
-`tools/lfr_decode.py` reproduces the stock `lfr_summary_generator.exe` decoder.
+`tools/lfr_decode.py` reproduces the stock `lfr_summary_generator.exe` decoder without embedding its key. It extracts the 1345-byte digit key from the user's stock utility and verifies its expected SHA-256.
 
-File format:
+All ten bundled recordings decompress to exactly **6,491,672 bytes**.
 
-1. first 4 bytes = little-endian compressed payload size;
-2. first 1345 bytes of payload use a 1345-byte ASCII-digit key from the stock utility;
-3. decrypt as `plain = encrypted - key_digit + '0'` modulo 256;
-4. zlib-decompress.
-
-The decoder does not embed the proprietary key. It extracts it from the user's stock `lfr_summary_generator.exe` at file offset `0xB750` and verifies key SHA-256 `a1e3e58e52cb7091bff6e1ea7ed8e14274b882f51134af69ca4ce0a72cc8613b`.
-
-All ten bundled LF2 recordings decode to exactly **6,491,672 bytes**.
-
-### Confirmed recording fields
-
-Global:
+Confirmed global offsets:
 
 - `0x000`: difficulty (`-1` CRAZY, `0` Difficult, `1` Normal, `2` Easy)
-- `0x004`: Stage progress (`0,10,20,30,40,50`)
-- `0x144`: movie length in 30 Hz game TUs
+- `0x004`: Stage progress
+- `0x144`: movie length in 30-Hz TUs
 - `0x148`: mode (`0` VS, `1` Stage, `2` 1-on-1, `3` 2-on-2, `4` Battle)
 - `0x1A4`: background id
 - `0x8B0..0x8BC`: F6..F9 flags
 - `0x8C0`: Stage-cleared flag
-- **`0x8C8`: stock 3000-byte RNG table**
+- `0x8C8`: 3000-byte stock RNG table
 - `0x630BC0`: author name
 - `0x630C24`: author info/email
 
-Per player, `i=0..7`:
+Per-player arrays for `i=0..7`:
 
-- role: `0x14 + i*4` (`-1` absent, `0` COM, `1` human)
-- character id: `0x34 + i*4`
-- team: `0x54 + i*4`
-- kill: `0x74 + i*4`
-- attack: `0x94 + i*4`
-- HP used/lost statistic: `0xB4 + i*4`
-- MP used: `0xD4 + i*4`
-- picking: `0xF4 + i*4`
-- result/status: `0x114 + i*4` (`-1` lose, `1` win & dead, `2` win & alive)
-- human display name: `0x14C + i*11`
+- role `0x14+i*4` (`-1` absent, `0` COM, `1` human)
+- character `0x34+i*4`
+- team `0x54+i*4`
+- kills `0x74+i*4`
+- attack `0x94+i*4`
+- HP used/lost `0xB4+i*4`
+- MP used `0xD4+i*4`
+- picking `0xF4+i*4`
+- result/status `0x114+i*4`
+- name `0x14C+i*11`
 
-### Input table
+Input table:
 
-- starts at `0x2B98`
-- 17815 records
-- 20 bytes per record
-- one record = one **15 Hz** stock input/network sample = two 30 Hz game TUs
-- local-player key bytes at record offsets `+14..+17`
-- bundled one-human demos use `+14`; `+15..+17` are normally zero
-- key bits match stock network action/direction bits except baseline bit `0x01` is absent.
+- starts at `0x2B98`;
+- 17,815 records;
+- 20 bytes/record;
+- each record is one 15-Hz sample / two 30-Hz TUs;
+- local keys are offsets `+14..+17`;
+- the bundled one-human demos use `+14` and normally leave `+15..+17` zero;
+- key masks match network action/direction bits except network baseline bit `0x01` is absent.
 
-Within the active movie span of the bundled one-human demos, the other recording-record bytes are constant zero, so `.lfr` itself does not expose the network health/checksum field.
+`Demo_Survival` outlives the fixed 17,815-record input table by 100 game TUs, so its final tail cannot currently be treated as a complete exact-input oracle. Do not silently synthesize missing input data.
 
-## Compact deterministic replay fixture (`.l2rf`)
+## Compact `.l2rf` reference fixture
 
-`tools/lfr_decode.py --fixture-dir <dir>` exports a compact fixture consumed by `src/replay_ref.c`.
+`tools/lfr_decode.py --fixture-dir <dir>` exports compact fixtures consumed by `src/replay_ref.c/.h`:
 
-Layout:
-
-1. 40-byte header (`L2RF`, version, mode, difficulty, background, stage, movie TUs, packet count, RNG length, flags);
-2. eight 48-byte player records containing role/character/team and stock result counters;
+1. 40-byte header;
+2. eight 48-byte player records;
 3. original 3000-byte RNG table;
-4. `packet_count * 4` local stock input bytes.
+4. `packet_count * 4` input bytes.
 
-`src/replay_ref.c/.h` can load the fixture, install its exact stock RNG table, map difficulty/background, and expose a lockstep callback which holds each recording sample for exactly two game TUs.
+The local internal build has fixtures for all ten stock demos. Packaging is conditional so the branch remains buildable without redistributing those game-derived files.
 
-The replay path is designed for deterministic offline comparison, not for shipping recording files in the final VPK.
+### Championship team code finding
 
-## Determinism diagnostics
+`Demo_1on1` stores teams as **10** and **11**, unlike normal VS teams 1..4. In the bundled reference corpus these are confirmed to be the two 1-on-1 championship sides. `replay_ref.c` now normalizes only this proven case:
 
-The local gameplay WIP now logs a scalar stock-state digest at TU 1 and every 30 game TUs. The digest includes deterministic fighter/object scalar state plus original RNG indices/call count and deliberately excludes pointers/padding.
+- mode 2 + raw team 10 -> Vita team 1
+- mode 2 + raw team 11 -> Vita team 2
 
-Example diagnostic form:
+Other unknown/out-of-range team codes are rejected instead of guessed. The stat comparator compares against the normalized match plan, not the raw championship side id.
 
-```text
-STOCK tu=300 packet=150 digest=... rng_i=... rng_j=... rng_calls=...
-```
+All ten fixtures were validated for known character IDs and valid normalized Vita team values after this change.
 
-This gives us a first-divergence locator once a Windows reference/capture exposes comparable checkpoints.
+## Deterministic reference runner
 
-The runtime also accumulates per-fighter diagnostic result counters:
+The hidden/internal replay path is now implemented for non-Stage fixtures:
 
-- attack dealt
-- HP lost
-- kills
-- MP used
-- item picking
+- loads `.l2rf` from `app0:/ref/` with `ux0:data/LF2V00001/ref/` fallback;
+- recreates roster, teams, difficulty and background;
+- installs the exact recorded stock RNG table;
+- applies each recorded 15-Hz input sample for exactly two 30-Hz TUs;
+- continues to the exact recorded TU limit even if a side has already reached KO;
+- can fast-forward up to 32 simulation TUs per rendered frame;
+- returns structured fighter counters;
+- compares `roster`, normalized `team`, `kills`, `attack`, `hp_lost`, `mp_used` and `picking` against Windows-LF2 recording values;
+- logs mismatches as `REFCMP`.
 
-and logs them as `STOCKSTAT` at stock-match cleanup. These are being matched against the corresponding final `.lfr` fields as a coarse end-to-end deterministic oracle.
+Stage replay execution is deliberately deferred until the Stage runtime can reproduce the stock recording state without inventing missing semantics.
 
-Known accounting gaps still to resolve include some sustained/status/self-damage paths such as Sonata-style damage and exact original HP/MP accounting semantics.
+The stock runtime also logs a deterministic scalar state digest at TU 1 and every 30 TUs, including RNG indices/call count. This will be used to locate the first divergence once comparable Windows checkpoints are available.
 
-## Combat-parity changes already made for stock mode
+## Combat parity already changed in stock mode
 
-Vita-only convenience/balance behavior is disabled when stock compatibility is active where identified:
+Where identified, Vita-only behavior is disabled while stock compatibility is active:
 
-- the previous victim-wide "one direct fighter hit per TU" latch is not used in stock mode;
-- Vita-only AI damage scaling by difficulty is not used in stock mode;
-- original LF2 `arest` / per-victim `vrest` remain the repeat-hit mechanism.
+- no victim-wide one-direct-hit-per-TU convenience latch;
+- no Vita-only CPU difficulty damage multiplier;
+- stock `arest` / per-victim `vrest` remain the repeat-hit mechanism.
 
-Offline Vita play keeps its existing compatibility fixes for now.
+Result counters are tracked for attack dealt, HP lost, kills, MP used and item picking.
 
-Still to reconcile against the reverse-engineered Windows attack routine:
-
-- frame/state-specific damage reductions (including the current Vita frame-110 rule);
-- exact `fall` / `bdefend` ordering;
-- grab/throw accounting;
-- sustained effects;
-- owner attribution and all result-stat edge cases;
-- RNG call order in AI/object paths.
+Important remaining combat mismatches include exact defense/bdefend handling, `fall`, armor/special defensive characters, grab/throw accounting, sustained effects, owner attribution, AI/RNG call order, and exact item/object processing order. The reverse-engineered Windows attack routine shows normal landed damage subtracting authored injury directly (after armor handling), while defended-hit paths use different accounting; the current Vita frame-110 shortcut is therefore still a compatibility target, not final behavior.
 
 ## Build status
 
-Current local WIP builds successfully with VitaSDK after linking the replay module. Large runtime/network translation units are compiled with `-Os` to retain enough Vita ELF metadata headroom.
+A clean local VitaSDK build after the 1-on-1 team normalization succeeds. The internal VPK passes `unzip -t` and includes all ten optional local reference fixtures. This remains an engineering build, **not** the next user hardware-test VPK.
 
-Latest internal WIP build at the time of this handoff passed VPK integrity checks. It is **not** a user hardware-test build yet.
+The critical split GitHub files for the current replay/stock path have been synchronized. In particular, `src/fix3/main_01.inc` and `main_09.inc` remain split wrappers; do not replace them with the local monolithic include files.
 
 ## Next engineering tasks
 
-1. Add a hidden developer replay runner which consumes `.l2rf`, recreates the exact roster/teams/background/difficulty, runs for exactly the recorded movie TUs, and compares `STOCKSTAT` with expected result fields.
-2. Fix the first reproducible replay mismatches rather than guessing globally.
-3. Finish exact result/stat accounting for unusual damage/status paths.
-4. Continue mapping Windows attack/rest/fall/bdefend behavior and RNG call order.
-5. Identify the stock packet health/state checksum from a real Windows capture without fabricating it.
-6. Finish Stage / championship / Battle / Demo stock network menu state machines.
-7. Only then ship the next hardware-test VPK for an unmodified Windows LF2 2.00a peer.
+1. Replace the remaining approximate defend/frame-110 damage path with behavior derived from the stock `attack_process`, including bdefend accumulation/break logic where proven.
+2. Run the deterministic non-Stage fixtures on Vita and use `REFCMP`/`STOCK` diagnostics to fix the first reproducible simulation divergence.
+3. Finish exact result/stat accounting for status/self/grab/throw paths.
+4. Implement the stock 1-on-1 and 2-on-2 Championship menu/bracket state machines without assuming unverified timing.
+5. Map the opaque packet health/state checksum from a real Windows capture.
+6. Implement Stage/Battle/Demo stock network state machines.
+7. Only then issue the next hardware-test VPK for an unmodified Windows LF2 2.00a peer.

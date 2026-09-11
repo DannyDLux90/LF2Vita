@@ -44,6 +44,14 @@ BACKGROUND_NAMES = {
     4: "Queen Island", 5: "Forbidden Tower", 6: "Brokeback Cliff",
     7: "CUHK", 8: "TaiHom Village", 99: "Lee On Road",
 }
+CHARACTER_NAMES = {
+    0: "template", 1: "deep", 2: "john", 4: "henry", 5: "rudolf",
+    6: "louis", 7: "firen", 8: "freeze", 9: "dennis", 10: "woody",
+    11: "davis", 30: "bandit", 31: "hunter", 32: "mark", 33: "jack",
+    34: "sorcerer", 35: "monk", 36: "jan", 37: "knight", 38: "bat",
+    39: "justin", 50: "louisEX", 51: "firzen", 52: "julian",
+}
+PLAYER_STATUS_NAMES = {-1: "lose", 1: "win & dead", 2: "win & alive"}
 
 KEY_NAMES = (
     (0x80, "down"),
@@ -120,6 +128,34 @@ def i32(decoded: bytes, off: int) -> int:
     return struct.unpack_from("<i", decoded, off)[0]
 
 
+def player_summary(decoded: bytes, index: int) -> dict | None:
+    role = i32(decoded, 0x14 + index * 4)
+    if role == -1:
+        return None
+    char_id = i32(decoded, 0x34 + index * 4)
+    raw_name = decoded[0x14C + index * 11 : 0x14C + index * 11 + 11]
+    name = raw_name.split(b"\0", 1)[0].decode("latin1", "replace")
+    if role != 1:
+        name = "[com]"
+    status = i32(decoded, 0x114 + index * 4)
+    return {
+        "slot": index + 1,
+        "role": "human" if role == 1 else "computer",
+        "role_raw": role,
+        "name": name,
+        "character": char_id,
+        "character_name": CHARACTER_NAMES.get(char_id, f"Unknown({char_id})"),
+        "team": i32(decoded, 0x54 + index * 4),
+        "kill": i32(decoded, 0x74 + index * 4),
+        "attack": i32(decoded, 0x94 + index * 4),
+        "hp_used": i32(decoded, 0xB4 + index * 4),
+        "mp_used": i32(decoded, 0xD4 + index * 4),
+        "picking": i32(decoded, 0xF4 + index * 4),
+        "status": status,
+        "status_name": PLAYER_STATUS_NAMES.get(status, ""),
+    }
+
+
 def recording_summary(path: Path, decoded: bytes) -> dict:
     nonzero = []
     used_slots = [0, 0, 0, 0]
@@ -140,6 +176,7 @@ def recording_summary(path: Path, decoded: bytes) -> dict:
     stage_name = None
     if stage_index is not None:
         stage_name = "Survival" if stage_index >= 5 else f"Stage {stage_index + 1}"
+    players = [p for i in range(8) if (p := player_summary(decoded, i)) is not None]
     return {
         "file": path.name,
         "decoded_size": len(decoded),
@@ -156,6 +193,7 @@ def recording_summary(path: Path, decoded: bytes) -> dict:
         "movie_seconds": round(movie_tus / GAME_HZ, 3),
         "stage_cleared": bool(i32(decoded, 0x8C0)) if mode == 1 else None,
         "f6_f9_used": any(i32(decoded, off) for off in (0x8B0, 0x8B4, 0x8B8, 0x8BC)),
+        "players": players,
         "input_start": INPUT_START,
         "input_stride": INPUT_STRIDE,
         "input_rate_hz": GAME_HZ / NETWORK_TUS,

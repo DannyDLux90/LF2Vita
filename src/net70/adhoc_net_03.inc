@@ -16,16 +16,25 @@ int lf2_adhoc_init(void){
     np.memory=g_net_mem;
     rc=sceNetInit(&np);if(rc<0){set_error("sceNetInit",rc);goto fail;}g_net_ready=true;
 
+    /* SceNetAdhocMatchingStart depends on SceNetCtl being initialized.
+       Without this, real Vita hardware returns 0x80412101
+       (SCE_NET_CTL_ERROR_NOT_INITIALIZED) before discovery can start. */
+    rc=sceNetCtlInit();
+    if(rc<0){set_error("sceNetCtlInit",rc);goto fail;}
+    g_netctl_ready=true;
+
     rc=sceNetAdhocInit();
     if(rc==SCE_ERROR_NET_ADHOC_ALREADY_INITIALIZED)g_adhoc_ready=true;
     else if(rc<0){set_error("sceNetAdhocInit",rc);goto fail;}
     else g_adhoc_ready=true;
 
-    SceNetAdhocctlAdhocId id;memset(&id,0,sizeof(id));id.type=SCE_NET_ADHOCCTL_ADHOCTYPE_PRODUCT_ID;memcpy(id.data,"LF2V00001",9);
+    SceNetAdhocctlAdhocId id;memset(&id,0,sizeof(id));id.type=SCE_NET_ADHOCCTL_ADHOCTYPE_RESERVED;memcpy(id.data,"LF2V00001",9);
     rc=sceNetAdhocctlInit(&id);
     if(rc==SCE_ERROR_NET_ADHOCCTL_ALREADY_INITIALIZED)g_ctl_ready=true;
     else if(rc<0){set_error("sceNetAdhocctlInit",rc);goto fail;}
     else g_ctl_ready=true;
+    refresh_adhoc_diag("after AdhocctlInit");
+    lf2_logf("NET","%s",g_diag);
 
     g_match_mem=memalign(64,LF2_MATCH_POOL);
     if(!g_match_mem){rc=-1;snprintf(g_error,sizeof(g_error),"matching memory allocation failed");goto fail;}
@@ -50,14 +59,21 @@ void lf2_adhoc_shutdown(void){
     lf2_log_stage("network:adhoc_shutdown","active=%d host=%d connected=%d",g_lobby.active?1:0,g_host?1:0,g_lobby.connected?1:0);
     adhoc_cleanup_runtime();memset(&g_lobby,0,sizeof(g_lobby));g_host=false;g_init=false;
 }
-const char *lf2_adhoc_local_name(void){return g_name;}uint32_t lf2_adhoc_local_avatar_hash(void){return g_avatar_hash;}const char *lf2_adhoc_error(void){return g_error;}const char *lf2_adhoc_game_version(void){return LF2_GAME_VERSION;}const char *lf2_adhoc_vita_version(void){return LF2_VITA_VERSION;}
+const char *lf2_adhoc_local_name(void){return g_name;}uint32_t lf2_adhoc_local_avatar_hash(void){return g_avatar_hash;}const char *lf2_adhoc_error(void){return g_error;}const char *lf2_adhoc_diag(void){refresh_adhoc_diag(g_browser?"Browser aktiv":(g_host?"Host aktiv":"AdHoc bereit"));return g_diag;}const char *lf2_adhoc_game_version(void){return LF2_GAME_VERSION;}const char *lf2_adhoc_vita_version(void){return LF2_VITA_VERSION;}
 
 static int start_matching(int mode,const void *hello,int hello_len){
-    clear_match();g_ev_head=g_ev_tail=0;g_match=sceNetAdhocMatchingCreate(mode,LF2_ADHOC_MAX_PLAYERS,LF2_MATCH_PORT,LF2_MATCH_RX,LF2_MATCH_HELLO_US,LF2_MATCH_PING_US,3,200000,matching_cb);if(g_match<0){set_error("MatchingCreate",g_match);return g_match;}
-    int rc=sceNetAdhocMatchingStart(g_match,0x40,0x4000,0x10000,hello_len,(void*)hello);if(rc<0){set_error("MatchingStart",rc);clear_match();return rc;}return 0;
+    clear_match();g_ev_head=g_ev_tail=0;
+    refresh_adhoc_diag("vor MatchingCreate");lf2_logf("NET","%s",g_diag);
+    g_match=sceNetAdhocMatchingCreate(mode,LF2_ADHOC_MAX_PLAYERS,LF2_MATCH_PORT,LF2_MATCH_RX,LF2_MATCH_HELLO_US,LF2_MATCH_PING_US,3,200000,matching_cb);
+    if(g_match<0){set_error("MatchingCreate",g_match);return g_match;}
+    int rc=sceNetAdhocMatchingStart(g_match,LF2_MATCH_THREAD_PRIORITY,LF2_MATCH_THREAD_STACK,LF2_MATCH_THREAD_AFFINITY,hello_len,(void*)hello);
+    if(rc<0){set_error("MatchingStart",rc);clear_match();return rc;}
+    refresh_adhoc_diag(mode==SCE_NET_ADHOC_MATCHING_MODE_PARENT?"Matching HOST gestartet":"Matching BROWSER gestartet");
+    lf2_logf("NET","%s pri=0x%08X stack=0x%X affinity=0x%X",g_diag,LF2_MATCH_THREAD_PRIORITY,LF2_MATCH_THREAD_STACK,LF2_MATCH_THREAD_AFFINITY);
+    return 0;
 }
 
-int lf2_adhoc_browser_start(void){int rc=lf2_adhoc_init();if(rc<0)return rc;g_host=false;g_session_count=0;memset(g_sessions,0,sizeof(g_sessions));rc=start_matching(SCE_NET_ADHOC_MATCHING_MODE_CHILD,NULL,0);if(rc>=0){g_browser=true;lf2_log_stage("network:adhoc_scan","started=1");}return rc;}
+int lf2_adhoc_browser_start(void){int rc=lf2_adhoc_init();if(rc<0)return rc;g_host=false;g_session_count=0;memset(g_sessions,0,sizeof(g_sessions));rc=start_matching(SCE_NET_ADHOC_MATCHING_MODE_CHILD,NULL,0);if(rc>=0){g_browser=true;refresh_adhoc_diag("Browser aktiv");lf2_log_stage("network:adhoc_scan","started=1 %s",g_diag);}else lf2_log_stage("network:adhoc_scan","started=0 rc=0x%08X error=%s",(unsigned)rc,g_error);return rc;}
 void lf2_adhoc_browser_stop(void){if(g_browser)clear_match();g_session_count=0;}
 int lf2_adhoc_browser_count(void){return g_session_count;}
 const lf2_adhoc_session_t *lf2_adhoc_browser_session(int i){return (i>=0&&i<g_session_count)?&g_sessions[i]:NULL;}
@@ -85,4 +101,3 @@ static int free_player_slot(void){for(int i=1;i<g_lobby.settings.max_players&&i<
 static int send_to(const SceNetInAddr *a,const void *p,int n){if(g_match<0)return -1;int rc=sceNetAdhocMatchingSendData(g_match,(SceNetInAddr*)a,n,(void*)p);if(rc<0&&rc!=SCE_NET_ADHOC_MATCHING_ERROR_DATA_BUSY)set_error("MatchingSendData",rc);return rc;}
 static void send_lobby_to(const SceNetInAddr *a){lobby_packet_t p;memset(&p,0,sizeof(p));p.h.magic=LF2_NET_MAGIC;p.h.proto=LF2_ADHOC_PROTO_VERSION;p.h.type=PKT_LOBBY;p.h.size=sizeof(p);p.h.seq=g_seq++;p.revision=g_lobby.revision;p.settings=g_lobby.settings;memcpy(p.players,g_lobby.players,sizeof(p.players));send_to(a,&p,sizeof(p));}
 static void broadcast_lobby(void){for(int i=0;i<LF2_ADHOC_MAX_PLAYERS;i++)if(g_peers[i].used)send_lobby_to(&g_peers[i].addr);update_hello();}
-

@@ -4,10 +4,12 @@
 #include <psp2/system_param.h>
 #include <psp2/sysmodule.h>
 #include <psp2/net/net.h>
+#include <psp2/net/netctl.h>
 #include <psp2/net/adhoc_matching.h>
 #include <psp2/pspnet_adhoc.h>
 #include <psp2/pspnet_adhocctl.h>
 #include <psp2/kernel/threadmgr.h>
+#include <psp2/kernel/cpu.h>
 #include <psp2/io/fcntl.h>
 #include <malloc.h>
 #include <stdio.h>
@@ -20,8 +22,14 @@
 #define LF2_MATCH_POOL (256*1024)
 #define LF2_NET_POOL (1024*1024)
 #define LF2_MATCH_RX 0x4000
-#define LF2_MATCH_HELLO_US 750000
+#define LF2_MATCH_HELLO_US 500000
 #define LF2_MATCH_PING_US 1000000
+/* Matching creates an internal Vita user thread. 0x40 is a PSP-era priority
+   and is not a valid Vita user-thread priority. Keep it in the same range as
+   LF2Vita's audio worker and give the matching worker a full 64 KiB stack. */
+#define LF2_MATCH_THREAD_PRIORITY 0x10000100
+#define LF2_MATCH_THREAD_STACK    0x10000
+#define LF2_MATCH_THREAD_AFFINITY SCE_KERNEL_CPU_MASK_USER_0
 #define LF2_NET_MAGIC 0x304E324Cu /* L2N0 */
 #define LF2_HELLO_MAGIC 0x4832464Cu /* LF2H */
 
@@ -125,6 +133,9 @@ static char g_name[18]="Vita Player";
 static uint32_t g_avatar_hash;
 static uint32_t g_local_peer_id;
 static char g_error[160];
+static char g_diag[192]="Netzwerk noch nicht gestartet";
+static int g_adhoc_state=-1;
+static int g_adhoc_state_rc=0;
 static queued_event_t g_events[64];
 static volatile int g_ev_head,g_ev_tail;
 static SceKernelLwMutexWork g_event_mutex;
@@ -148,5 +159,4 @@ static uint8_t g_local_ready;
 static uint32_t g_last_logged_revision;
 static bool g_mutex_ready;
 static bool g_mod_net_loaded,g_mod_adhoc_loaded,g_mod_matching_loaded;
-static bool g_net_ready,g_adhoc_ready,g_ctl_ready,g_matching_ready;
-
+static bool g_net_ready,g_netctl_ready,g_adhoc_ready,g_ctl_ready,g_matching_ready;

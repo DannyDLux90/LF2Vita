@@ -1,5 +1,15 @@
 static uint64_t now_us(void){return sceKernelGetSystemTimeWide();}
-static void set_error(const char *where,int rc){snprintf(g_error,sizeof(g_error),"%s: 0x%08X",where,(unsigned)rc);lf2_logf("NET","%s",g_error);}
+static void refresh_adhoc_diag(const char *where){
+    if(g_netctl_ready){g_adhoc_state=-1;g_adhoc_state_rc=sceNetCtlAdhocGetState(&g_adhoc_state);}
+    else {g_adhoc_state=-1;g_adhoc_state_rc=-1;}
+    snprintf(g_diag,sizeof(g_diag),"%s  ctl_state=%d ctl_rc=0x%08X match=%d",
+             where?where:"AdHoc",g_adhoc_state,(unsigned)g_adhoc_state_rc,g_match);
+}
+static void set_error(const char *where,int rc){
+    refresh_adhoc_diag(where);
+    snprintf(g_error,sizeof(g_error),"%s: 0x%08X (state=%d)",where,(unsigned)rc,g_adhoc_state);
+    lf2_logf("NET","%s diag=%s",g_error,g_diag);
+}
 static uint32_t fnv1a(const void *ptr,size_t n){const uint8_t *p=ptr;uint32_t h=2166136261u;for(size_t i=0;i<n;i++){h^=p[i];h*=16777619u;}return h;}
 
 static uint32_t local_avatar_hash(void){
@@ -42,6 +52,7 @@ static void adhoc_cleanup_runtime(void){
     if(g_matching_ready){sceNetAdhocMatchingTerm();g_matching_ready=false;}
     if(g_ctl_ready){sceNetAdhocctlTerm();g_ctl_ready=false;}
     if(g_adhoc_ready){sceNetAdhocTerm();g_adhoc_ready=false;}
+    if(g_netctl_ready){sceNetCtlTerm();g_netctl_ready=false;}
     if(g_net_ready){sceNetTerm();g_net_ready=false;}
     free(g_match_mem);free(g_net_mem);g_match_mem=g_net_mem=NULL;
     if(g_mod_matching_loaded){sceSysmoduleUnloadModule(SCE_SYSMODULE_NET_ADHOC_MATCHING);g_mod_matching_loaded=false;}
@@ -49,4 +60,3 @@ static void adhoc_cleanup_runtime(void){
     if(g_mod_net_loaded){sceSysmoduleUnloadModule(SCE_SYSMODULE_NET);g_mod_net_loaded=false;}
     if(g_mutex_ready){sceKernelDeleteLwMutex(&g_event_mutex);g_mutex_ready=false;}
 }
-

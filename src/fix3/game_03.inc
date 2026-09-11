@@ -41,8 +41,8 @@ static void start_special_frame(fighter_t *f,int id) {
         return;
     }
     int before=f->mp;
-    f->mp-=cost;
-    if(hp_cost>0){f->hp-=hp_cost;if(f->hp<1)f->hp=1;}
+    f->mp-=cost;f->stat_mp_usage+=cost;
+    if(hp_cost>0){int old_hp=f->hp;f->hp-=hp_cost;if(f->hp<1)f->hp=1;fighter_stat_damage(NULL,f,old_hp);}
     f->hit_latched=false;
     lf2_logf("GAME","%s special frame=%d label=%s cost=%d mp=%d->%d",f->def.name,id,fr->label,cost,before,f->mp);
     set_frame(f,id);
@@ -61,11 +61,11 @@ static int prepare_chained_frame(fighter_t *f,int id){
     if(f->mp<cost || (hp_cost>0&&f->hp<=hp_cost)){
         int escape=(fr->hit_d>0&&fr->hit_d<LF2_MAX_FRAMES&&f->def.frames[fr->hit_d].present)?fr->hit_d:0;
         lf2_logf("MP","%s continuous exhausted frame=%d mp=%d cost=%d -> %d",f->def.name,id,f->mp,cost,escape);
-        f->mp=0;
+        f->stat_mp_usage+=f->mp;f->mp=0;
         return escape;
     }
-    int before=f->mp;f->mp-=cost;
-    if(hp_cost>0){f->hp-=hp_cost;if(f->hp<1)f->hp=1;}
+    int before=f->mp;f->mp-=cost;f->stat_mp_usage+=cost;
+    if(hp_cost>0){int old_hp=f->hp;f->hp-=hp_cost;if(f->hp<1)f->hp=1;fighter_stat_damage(NULL,f,old_hp);}
     lf2_logf("MP","%s continuous frame=%d cost=%d mp=%d->%d",f->def.name,id,cost,before,f->mp);
     return id;
 }

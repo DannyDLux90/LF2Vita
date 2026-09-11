@@ -80,14 +80,29 @@ bool lf2_ref_replay_clock(void *userdata,uint32_t local_held[4],uint32_t remote_
     r->tu++;return 1;
 }
 
+static int vita_team_from_fixture(const lf2_ref_replay_t *r,int raw_team){
+    if(!r)return raw_team;
+    /* Stock 1-on-1 recordings use championship side ids 10 and 11 rather
+       than the regular VS team ids.  Their only confirmed meaning in the
+       bundled reference corpus is left bracket side vs right bracket side. */
+    if(r->mode==2){
+        if(raw_team==10)return 1;
+        if(raw_team==11)return 2;
+    }
+    return raw_team;
+}
+
 int lf2_ref_replay_build_match(const lf2_ref_replay_t *r,lf2_ref_match_plan_t *out){
     if(!r||!out)return -1;memset(out,0,sizeof(*out));
     int actor=0,human_control=0;
     for(int slot=0;slot<LF2_REF_PLAYER_COUNT;slot++){
         const lf2_ref_player_t *p=&r->players[slot];if(p->role<0)continue;
         int roster=lf2_roster_from_original_id(p->character);if(roster<0)return -10-slot;
-        if(actor==0){out->player_index=roster;out->player_team=p->team;}
-        else {if(actor>7)return -30;out->cpu_indices[actor-1]=roster;out->cpu_teams[actor-1]=p->team;}
+        int team=vita_team_from_fixture(r,p->team);
+        if(team<0||team>4){lf2_logf("REF","unsupported team mode=%d slot=%d raw=%d",r->mode,slot+1,p->team);return -20-slot;}
+        if(team!=p->team)lf2_logf("REF","team normalize mode=%d slot=%d raw=%d vita=%d",r->mode,slot+1,p->team,team);
+        if(actor==0){out->player_index=roster;out->player_team=team;}
+        else {if(actor>7)return -30;out->cpu_indices[actor-1]=roster;out->cpu_teams[actor-1]=team;}
         out->actor_fixture_slot[actor]=slot;
         if(p->role==1){if(human_control>=4)return -40-slot;out->actor_control[actor]=(uint8_t)(1+human_control++);}
         actor++;
@@ -107,7 +122,8 @@ int lf2_ref_replay_compare_stats(const lf2_ref_replay_t *r,const lf2_ref_match_p
         int slot=plan->actor_fixture_slot[a];const lf2_ref_player_t *e=&r->players[slot];const lf2_stock_stat_t *v=&actual[a];
         int er=lf2_roster_from_original_id(e->character);
 #define CMP(field,ev,av) do{int _e=(ev),_a=(av);if(_e!=_a){lf2_logf("REFCMP","actor=%d slot=%d %s expected=%d actual=%d",a,slot+1,(field),_e,_a);mismatches++;}}while(0)
-        CMP("roster",er,v->roster_idx);CMP("team",e->team,v->team);CMP("kill",e->kill,v->kills);CMP("attack",e->attack,v->attack);
+        int expected_team=(a==0)?plan->player_team:plan->cpu_teams[a-1];
+        CMP("roster",er,v->roster_idx);CMP("team",expected_team,v->team);CMP("kill",e->kill,v->kills);CMP("attack",e->attack,v->attack);
         CMP("hp_lost",e->hp_used,v->hp_lost);CMP("mp_used",e->mp_used,v->mp_used);CMP("picking",e->picking,v->picking);
 #undef CMP
     }

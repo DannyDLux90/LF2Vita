@@ -41,7 +41,7 @@ const lf2_roster_entry_t lf2_roster[] = {
     {"Louis",    "data/louis.dat",    "sprite/sys/louis_f.bmp",    false},
     {"Firen",    "data/firen.dat",    "sprite/sys/firen_f.bmp",    false},
     {"Freeze",   "data/freeze.dat",   "sprite/sys/freeze_f.bmp",   false},
-    {"Dennis",   "data/dennis.dat",   "sprite/sys/dennis_f.bmp",   false},
+    {"Dennis",   "data/dennis.dat",   "sprite/sys/dennis_f.bmp",  false},
     {"Woody",    "data/woody.dat",    "sprite/sys/woody_f.bmp",    false},
     {"Davis",    "data/davis.dat",    "sprite/sys/davis_f.bmp",    false},
     {"Bandit",   "data/bandit.dat",   "sprite/sys/bandit_f.bmp",   true},
@@ -127,6 +127,12 @@ typedef struct {
     int held_units;
     bool drinking;
     int drink_tick;
+    /* Original-style Stage summary counters. */
+    int stat_kills;
+    int stat_attack;
+    int stat_hp_lost;
+    int stat_mp_usage;
+    int stat_picking;
     unsigned frame_serial;
     unsigned state_processed_serial;
     vita2d_texture *hud_face;
@@ -134,6 +140,19 @@ typedef struct {
        several enemy slots. Ordinary match fighters own their assets. */
     bool owns_assets;
 } fighter_t;
+
+static lf2_stage_summary_t g_last_stage_summary;
+void lf2_get_last_stage_summary(lf2_stage_summary_t *out){if(out)*out=g_last_stage_summary;}
+
+static void fighter_stat_damage(fighter_t *attacker,fighter_t *victim,int old_hp){
+    if(!victim||old_hp<=victim->hp)return;
+    int dealt=old_hp-victim->hp;
+    victim->stat_hp_lost+=dealt;
+    if(attacker&&attacker!=victim){
+        attacker->stat_attack+=dealt;
+        if(old_hp>0&&victim->hp==0)attacker->stat_kills++;
+    }
+}
 
 static bool g_runtime_cheat=false;
 static int load_fighter(fighter_t *f,int roster_idx,bool ai,int team,float x,float z,int facing,int slot,int hp);

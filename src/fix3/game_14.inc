@@ -25,6 +25,7 @@
             }
             if(b->frame==110)dmg=(dmg+3)/4;if(dmg<1)dmg=1;
             int old=b->hp;b->hp-=dmg;if(b->hp<0)b->hp=0;if(b->hp==0)b->dead=true;
+            fighter_stat_damage(a,b,old);
             if(!b->dead)apply_hit_reaction(b,a->facing,&resolved);
             lf2_audio_play(item_hit_sound(oid));spawn_hit_fx(world,b,0);
             if(a->held_units>0)a->held_units--;

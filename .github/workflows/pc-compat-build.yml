@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pc-compat-wip-build
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,13 +42,30 @@ jobs:
           test -s build/lf2vita.vpk
           cmake -E tar tf build/lf2vita.vpk >/dev/null
 
-      - name: Upload engineering build
+      - name: Package source and workspace
+        if: always()
+        run: |
+          rm -rf artifact_bundle
+          mkdir -p artifact_bundle/source artifact_bundle/workspace
+          git archive HEAD | tar -x -C artifact_bundle/source
+          if [ -d build ]; then cp -a build artifact_bundle/workspace/build; fi
+          printf 'branch=pc-compat-wip\ncommit=%s\nworkflow_run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > artifact_bundle/workspace/BUILD_INFO.txt
+          cmake -E tar cf "LF2Vita-source-workspace-${GITHUB_SHA}.zip" --format=zip -- artifact_bundle
+
+      - name: Upload source and workspace ZIP
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lf2vita-pc-compat-${{ github.sha }}
-          path: |
-            build/lf2vita
-            build/eboot.bin
-            build/lf2vita.vpk
+          name: lf2vita-source-workspace-${{ github.sha }}
+          path: LF2Vita-source-workspace-${{ github.sha }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload VPK separately
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lf2vita-vpk-${{ github.sha }}
+          path: build/lf2vita.vpk
           if-no-files-found: error
           retention-days: 7

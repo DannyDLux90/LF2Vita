@@ -25,6 +25,9 @@ add_link_options(-Wl,--gc-sections)
 # Request the Vita extended-memory application profile.
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
 
+# Keep the menu/network shell compact enough for Vita ELF metadata headroom.
+set_source_files_properties(src/main.c src/net70/pc_net.c PROPERTIES COMPILE_OPTIONS "-Os")
+
 add_executable(lf2vita
   src/main.c
   src/filecheck.c
@@ -36,17 +39,19 @@ add_executable(lf2vita
   src/lf2_data.c
   src/stage_data.c
   src/lf2_core.c
+  src/lf2_rng.c
   src/net70/adhoc_net.c
+  src/net70/pc_net.c
 )
 
 target_include_directories(lf2vita PRIVATE src)
 
 target_link_libraries(lf2vita
   vita2d png jpeg freetype z m c
-  SceDisplay_stub SceGxm_stub SceSysmodule_stub SceCtrl_stub
-  ScePgf_stub ScePvf_stub SceCommonDialog_stub SceAppUtil_stub
+  SceDisplay_stub SceGxm_stub SceSysmodule_stub SceCtrl_stub SceTouch_stub
+  ScePgf_stub ScePvf_stub SceCommonDialog_stub SceIme_stub SceAppUtil_stub
   SceAppMgr_stub SceIofilemgr_stub SceLibKernel_stub SceAudio_stub
-  SceNet_stub ScePspnetAdhoc_stub SceNetAdhocMatching_stub
+  SceNet_stub SceNetCtl_stub ScePspnetAdhoc_stub SceNetAdhocMatching_stub
 )
 
 vita_create_self(eboot.bin lf2vita UNSAFE)

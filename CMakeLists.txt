@@ -25,8 +25,10 @@ add_link_options(-Wl,--gc-sections)
 # Request the Vita extended-memory application profile.
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
 
-# Keep the menu/network shell compact enough for Vita ELF metadata headroom.
-set_source_files_properties(src/main.c src/net70/pc_net.c PROPERTIES COMPILE_OPTIONS "-Os")
+# Keep the large runtime/network translation units compact enough for Vita ELF
+# metadata headroom.  -Os is semantics-preserving here and avoids overlap when
+# the stock-PC/replay diagnostic code is linked in.
+set_source_files_properties(src/main.c src/game.c src/net70/pc_net.c src/replay_ref.c PROPERTIES COMPILE_OPTIONS "-Os")
 
 add_executable(lf2vita
   src/main.c
@@ -40,6 +42,7 @@ add_executable(lf2vita
   src/stage_data.c
   src/lf2_core.c
   src/lf2_rng.c
+  src/replay_ref.c
   src/net70/adhoc_net.c
   src/net70/pc_net.c
 )

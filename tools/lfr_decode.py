@@ -35,6 +35,10 @@ INPUT_START = 0x2B98
 INPUT_STRIDE = 20
 INPUT_CAPACITY = 17_815
 INPUT_KEY_OFFSETS = (14, 15, 16, 17)
+RNG_TABLE_OFFSET = 0x8C8
+RNG_TABLE_LEN = 3000
+FIXTURE_MAGIC = b"L2RF"
+FIXTURE_VERSION = 1
 GAME_HZ = 30.0
 NETWORK_TUS = 2
 MODE_NAMES = {0: "VS", 1: "Stage", 2: "1 on 1", 3: "2 on 2", 4: "Battle"}
@@ -137,7 +141,6 @@ def player_summary(decoded: bytes, index: int) -> dict | None:
     name = raw_name.split(b"\0", 1)[0].decode("latin1", "replace")
     if role != 1:
         name = "[com]"
-    status = i32(decoded, 0x114 + index * 4)
     return {
         "slot": index + 1,
         "role": "human" if role == 1 else "computer",
@@ -151,9 +154,84 @@ def player_summary(decoded: bytes, index: int) -> dict | None:
         "hp_used": i32(decoded, 0xB4 + index * 4),
         "mp_used": i32(decoded, 0xD4 + index * 4),
         "picking": i32(decoded, 0xF4 + index * 4),
-        "status": status,
-        "status_name": PLAYER_STATUS_NAMES.get(status, ""),
+        "status": i32(decoded, 0x114 + index * 4),
+        "status_name": PLAYER_STATUS_NAMES.get(i32(decoded, 0x114 + index * 4), ""),
     }
+
+
+def write_fixture(path: Path, source: Path, decoded: bytes) -> None:
+    """Write a compact deterministic replay fixture for LF2Vita.
+
+    The fixture is intentionally derived only from fields proven in the stock
+    recording format.  It carries the original 3000-byte RNG table, the eight
+    player descriptors/final statistics and one 4-byte local-control sample per
+    15 Hz recording packet.  It does not invent remote controls or opaque
+    network checksum fields.
+    """
+    mode = i32(decoded, 0x148)
+    difficulty = i32(decoded, 0x000)
+    background = i32(decoded, 0x1A4)
+    stage_raw = i32(decoded, 0x004)
+    movie_tus = max(0, i32(decoded, 0x144))
+    packet_count = min(INPUT_CAPACITY, (movie_tus + NETWORK_TUS - 1) // NETWORK_TUS)
+    flags = 0
+    if any(i32(decoded, off) for off in (0x8B0, 0x8B4, 0x8B8, 0x8BC)):
+        flags |= 1
+    if mode == 1 and i32(decoded, 0x8C0):
+        flags |= 2
+
+    header = struct.pack(
+        "<4sHHiiiiIIII",
+        FIXTURE_MAGIC,
+        FIXTURE_VERSION,
+        40,
+        mode,
+        difficulty,
+        background,
+        stage_raw,
+        movie_tus,
+        packet_count,
+        RNG_TABLE_LEN,
+        flags,
+    )
+    assert len(header) == 40
+
+    out = bytearray(header)
+    for index in range(8):
+        pinfo = player_summary(decoded, index)
+        if pinfo is None:
+            role = -1
+            char_id = team = kill = attack = hp_used = mp_used = picking = status = 0
+            name = b""
+        else:
+            role = pinfo["role_raw"]
+            char_id = pinfo["character"]
+            team = pinfo["team"]
+            kill = pinfo["kill"]
+            attack = pinfo["attack"]
+            hp_used = pinfo["hp_used"]
+            mp_used = pinfo["mp_used"]
+            picking = pinfo["picking"]
+            status = pinfo["status"]
+            name = pinfo["name"].encode("latin1", "replace")[:11]
+        name = name + b"\0" * (12 - len(name))
+        rec = struct.pack(
+            "<iiiiiiiii12s",
+            role, char_id, team, kill, attack, hp_used, mp_used, picking, status, name,
+        )
+        assert len(rec) == 48
+        out.extend(rec)
+
+    rng = decoded[RNG_TABLE_OFFSET:RNG_TABLE_OFFSET + RNG_TABLE_LEN]
+    if len(rng) != RNG_TABLE_LEN:
+        raise ValueError(f"{source}: RNG table is truncated")
+    out.extend(rng)
+    for frame, _off, _rec, keys in iter_input_records(decoded):
+        if frame >= packet_count:
+            break
+        out.extend(bytes(keys))
+
+    path.write_bytes(out)
 
 
 def recording_summary(path: Path, decoded: bytes) -> dict:
@@ -194,6 +272,9 @@ def recording_summary(path: Path, decoded: bytes) -> dict:
         "stage_cleared": bool(i32(decoded, 0x8C0)) if mode == 1 else None,
         "f6_f9_used": any(i32(decoded, off) for off in (0x8B0, 0x8B4, 0x8B8, 0x8BC)),
         "players": players,
+        "rng_table_offset": RNG_TABLE_OFFSET,
+        "rng_table_len": RNG_TABLE_LEN,
+        "rng_table_sha256": hashlib.sha256(decoded[RNG_TABLE_OFFSET:RNG_TABLE_OFFSET + RNG_TABLE_LEN]).hexdigest(),
         "input_start": INPUT_START,
         "input_stride": INPUT_STRIDE,
         "input_rate_hz": GAME_HZ / NETWORK_TUS,
@@ -216,6 +297,7 @@ def main() -> int:
         help="stock lfr_summary_generator.exe used to extract the 1345-byte digit key",
     )
     ap.add_argument("--out-dir", type=Path, help="write decoded .bin files here")
+    ap.add_argument("--fixture-dir", type=Path, help="write compact .l2rf deterministic replay fixtures here")
     ap.add_argument("--inputs", action="store_true", help="print non-idle 20-byte input records")
     ap.add_argument("--all-inputs", action="store_true", help="print every input record, including idle")
     ap.add_argument("--json", action="store_true", help="emit machine-readable JSON summaries")
@@ -225,6 +307,8 @@ def main() -> int:
     summaries = []
     if args.out_dir:
         args.out_dir.mkdir(parents=True, exist_ok=True)
+    if args.fixture_dir:
+        args.fixture_dir.mkdir(parents=True, exist_ok=True)
 
     for path in args.lfr:
         decoded = decode_lfr(path, key)
@@ -233,6 +317,9 @@ def main() -> int:
         if args.out_dir:
             out = args.out_dir / (path.stem + ".decoded.bin")
             out.write_bytes(decoded)
+        if args.fixture_dir:
+            fixture = args.fixture_dir / (path.stem + ".l2rf")
+            write_fixture(fixture, path, decoded)
         if args.inputs or args.all_inputs:
             print(f"# {path}")
             for frame, off, rec, keys in iter_input_records(decoded):

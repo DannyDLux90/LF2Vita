@@ -8,6 +8,14 @@
 #include "fix3/game_02_prefix.inc"
 #undef in_action
 
+/* Diagnostics and the stock packet input adapter depend only on the core
+   fighter/object types established above, so keep them at this known top-level
+   boundary rather than inside the later split match function. */
+#define stock_state_digest stock_base_state_digest
+#include "fix3/game_stock_diag.inc"
+#undef stock_state_digest
+#include "fix3/game_stock_input.inc"
+
 /* The hitlag layer owns the first-stage defend/update wrappers. Rename those
    symbols while including it so the armor layer can add the hard-coded stock
    character armor and caught-recovery exception behind them. */
@@ -74,11 +82,6 @@
 #undef handle_form_input
 
 #include "fix3/game_20.inc"
-
-#define stock_state_digest stock_base_state_digest
-#include "fix3/game_stock_diag.inc"
-#undef stock_state_digest
-
 #include "fix3/game_21.inc"
 #include "fix3/game_22.inc"
 #include "fix3/game_23.inc"

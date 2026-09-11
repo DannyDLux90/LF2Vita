@@ -25,9 +25,7 @@ add_link_options(-Wl,--gc-sections)
 # Request the Vita extended-memory application profile.
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
 
-# Keep the large runtime/network translation units compact enough for Vita ELF
-# metadata headroom.  -Os is semantics-preserving here and avoids overlap when
-# the stock-PC/replay diagnostic code is linked in.
+# Keep the menu/network shell compact enough for Vita ELF metadata headroom.
 set_source_files_properties(src/main.c src/game.c src/net70/pc_net.c src/replay_ref.c PROPERTIES COMPILE_OPTIONS "-Os")
 
 add_executable(lf2vita
@@ -64,6 +62,23 @@ vita_create_self(eboot.bin lf2vita UNSAFE)
 # VitaShell installation metadata overhead while still keeping the game data
 # directly inside the VPK.
 set(LF2_OPTIONAL_MUSIC_ARGS)
+set(LF2_OPTIONAL_REF_ARGS)
+foreach(LF2_REF_NAME
+    recording_Demo_1on1.l2rf
+    recording_Demo_2on2.l2rf
+    recording_Demo_Battle.l2rf
+    recording_Demo_Stage_1.l2rf
+    recording_Demo_Stage_2.l2rf
+    recording_Demo_Stage_3.l2rf
+    recording_Demo_Stage_4.l2rf
+    recording_Demo_Stage_5.l2rf
+    recording_Demo_Survival.l2rf
+    recording_Demo_VS.l2rf)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/ref/${LF2_REF_NAME}")
+    list(APPEND LF2_OPTIONAL_REF_ARGS FILE "${CMAKE_SOURCE_DIR}/ref/${LF2_REF_NAME}" "ref/${LF2_REF_NAME}")
+  endif()
+endforeach()
+
 if(EXISTS "${CMAKE_SOURCE_DIR}/assets/main_bgm.wav")
   list(APPEND LF2_OPTIONAL_MUSIC_ARGS FILE "${CMAKE_SOURCE_DIR}/assets/main_bgm.wav" "assets/main_bgm.wav")
 else()
@@ -93,6 +108,7 @@ vita_create_vpk(lf2vita.vpk ${VITA_TITLEID} eboot.bin
   FILE "${CMAKE_SOURCE_DIR}/assets/manual_bg.png" "assets/manual_bg.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/portraits.png" "assets/portraits.png"
   ${LF2_OPTIONAL_MUSIC_ARGS}
+  ${LF2_OPTIONAL_REF_ARGS}
   FILE "${CMAKE_SOURCE_DIR}/assets/stages/00_sp.png" "assets/stages/00_sp.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/stages/01_bc.png" "assets/stages/01_bc.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/stages/02_cuhk.png" "assets/stages/02_cuhk.png"

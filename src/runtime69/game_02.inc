@@ -78,10 +78,10 @@ static int prepare_chained_frame(fighter_t *f,int id){
     return id;
 }
 
-static int resolve_command_frame(fighter_t *f,const input_t *in){
+static int resolve_command_frame_mode(fighter_t *f,const input_t *in,int allow_base){
     if(!f||!in)return 0;lf2_frame_def_t *base=&f->def.frames[0],*cur=frame_def(f);
     if(!cur)cur=base;
-#define LF2_CMD(field) ((cur->field>0)?cur->field:base->field)
+#define LF2_CMD(field) ((cur->field>0)?cur->field:(allow_base?base->field:0))
     bool forward=f->facing?in->left:in->right;
 
     /* Vita convenience shortcuts map onto the original LF2 command fields,
@@ -109,6 +109,9 @@ static int resolve_command_frame(fighter_t *f,const input_t *in){
 #undef LF2_CMD
     return 0;
 }
+
+static int resolve_command_frame(fighter_t *f,const input_t *in){return resolve_command_frame_mode(f,in,1);}
+static int resolve_chained_command_frame(fighter_t *f,const input_t *in){return resolve_command_frame_mode(f,in,0);}
 
 static void update_animation(fighter_t *f, const input_t *in) {
     lf2_frame_def_t *fr=frame_def(f);

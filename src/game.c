@@ -4,7 +4,14 @@
 #define in_action stock_base_in_action
 #include "fix3/game_02.inc"
 #undef in_action
+
+/* The hitlag layer owns the first-stage defend wrapper. Rename only that
+   symbol while including it so the armor layer can add the hard-coded stock
+   character armor behind normal state-7 defense. */
+#define stock_try_defend_hit stock_hitlag_try_defend_hit
 #include "fix3/game_stock_hitlag.inc"
+#undef stock_try_defend_hit
+#include "fix3/game_stock_armor.inc"
 
 #include "fix3/game_03.inc"
 
@@ -37,7 +44,9 @@
 #undef stock_note_unblocked_hit
 #undef stock_try_defend_hit
 
+#define object_apply_hits stock_base_object_apply_hits
 #include "fix3/game_13.inc"
+#undef object_apply_hits
 
 #define apply_hits stock_base_apply_hits
 #include "fix3/game_14.inc"

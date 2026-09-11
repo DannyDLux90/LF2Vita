@@ -25,6 +25,7 @@ static void update_control(fighter_t *f, const input_t *in) {
     static const input_t zero={0};
     if(!in)in=&zero;
     if(f->fall_points>0)f->fall_points--;
+    if(f->bdefend_points>0)f->bdefend_points--;
     if(f->hit_flash>0)f->hit_flash--;
     if(f->arest_ticks>0)f->arest_ticks--;
     for(int ri=0;ri<LF2_MAX_ACTORS;ri++)if(f->vrest_ticks[ri]>0)f->vrest_ticks[ri]--;

@@ -62,19 +62,27 @@ static void object_apply_hits(object_world_t *w,world_object_t *o,fighter_t *fig
                     int heal=it->injury>0?it->injury:50;int old=b->hp;b->hp+=heal;if(b->hp>b->max_hp)b->hp=b->max_hp;
                     lf2_logf("OBJECT","heal oid=%d target=%s hp=%d->%d",o->oid,b->def.name,old,b->hp);
                 } else {
-                    int dmg=it->injury>0?it->injury:1;
-                    if(o->owner>=0&&o->owner<total&&fighters[o->owner].ai){
+                    int authored=it->injury>0?it->injury:0;
+                    int dmg=g_runtime_stock_compat?authored:(it->injury>0?it->injury:1);
+                    if(!g_runtime_stock_compat&&o->owner>=0&&o->owner<total&&fighters[o->owner].ai){
                         if(difficulty==LF2_DIFF_EASY)dmg=dmg*4/5;
                         else if(difficulty==LF2_DIFF_DIFFICULT)dmg=dmg*11/10;
                         else if(difficulty==LF2_DIFF_CRAZY)dmg=dmg*5/4;
                     }
-                    if(b->frame==110)dmg=(dmg+3)/4;if(dmg<1)dmg=1;
+                    int defended=stock_try_defend_hit(b,o->facing,it,authored,&dmg);
+                    if(!g_runtime_stock_compat&&b->frame==110)dmg=(dmg+3)/4;
+                    if(!g_runtime_stock_compat&&dmg<1)dmg=1;
                     int old=b->hp;b->hp-=dmg;if(b->hp<0)b->hp=0;
                     if(b->hp==0)b->dead=true;
-                    int status_applied=(!b->dead)?apply_elemental_status(b,it->effect,o->facing,it):0;
-                    if(!status_applied&&!apply_caught_hurt_frame(b,o->facing))apply_hit_reaction(b,o->facing,it);
-                    play_hit_sound(it->effect,it->fall?it->fall:20,dmg);spawn_hit_fx(w,b,it->effect);
-                    lf2_logf("OBJECT","hit oid=%d owner=%d target=%s hp=%d->%d effect=%d state=%d",o->oid,o->owner,b->def.name,old,b->hp,it->effect,of->state);
+                    if(!defended){
+                        stock_note_unblocked_hit(b);
+                        int status_applied=(!b->dead)?apply_elemental_status(b,it->effect,o->facing,it):0;
+                        if(!status_applied&&!apply_caught_hurt_frame(b,o->facing))apply_hit_reaction(b,o->facing,it);
+                        play_hit_sound(it->effect,it->fall?it->fall:20,dmg);spawn_hit_fx(w,b,it->effect);
+                    }else if(b->dead){
+                        apply_hit_reaction(b,o->facing,it);
+                    }
+                    lf2_logf("OBJECT","hit oid=%d owner=%d target=%s hp=%d->%d effect=%d state=%d defend=%d",o->oid,o->owner,b->def.name,old,b->hp,it->effect,of->state,defended);
                 }
                 if(it->arest>0)o->arest_ticks=it->arest;if(it->vrest>0)o->vrest_ticks[target]=it->vrest;
                 if(o->type==1){

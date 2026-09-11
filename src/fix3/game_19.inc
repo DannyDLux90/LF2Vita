@@ -62,7 +62,7 @@ static const float spawn_z[LF2_MAX_ACTORS]={0.0f,-52.0f,-18.0f,18.0f,52.0f,-35.0
     -60.0f,-42.0f,-24.0f,-6.0f,12.0f,30.0f,48.0f};
 
 static void reset_fighter_state(fighter_t *f,float x,float z,int facing){
-    f->x=x;f->z=z;f->y=0;f->vx=f->vy=f->vz=0;f->facing=facing;f->hp=f->max_hp;f->mp=500;f->dead=false;f->invuln=0;f->ai_cooldown=0;f->hit_latched=false;f->fall_points=0;f->falling=false;f->hit_flash=0;f->frozen_ticks=0;f->burn_ticks=0;f->sonata_ticks=0;f->sonata_damage_cooldown=0;f->status_age=0;f->mp_regen_tick=0;f->jan_heal_ticks=0;f->jan_heal_phase=0;f->grabbed_ticks=0;f->ice_sword_ticks=0;f->held_oid=0;f->held_units=0;f->drinking=false;f->drink_tick=0;f->fusion_ticks=0;f->fusion_return_roster=-1;f->fusion_partner_roster=-1;f->fusion_partner_slot=-1;f->holding_slot=-1;f->caught_by=-1;f->thrown_by=-1;f->arest_ticks=0;memset(f->vrest_ticks,0,sizeof(f->vrest_ticks));set_frame(f,0);
+    f->x=x;f->z=z;f->y=0;f->vx=f->vy=f->vz=0;f->facing=facing;f->hp=f->max_hp;f->mp=500;f->dead=false;f->invuln=0;f->ai_cooldown=0;f->hit_latched=false;f->fall_points=0;f->bdefend_points=0;f->falling=false;f->hit_flash=0;f->frozen_ticks=0;f->burn_ticks=0;f->sonata_ticks=0;f->sonata_damage_cooldown=0;f->status_age=0;f->mp_regen_tick=0;f->jan_heal_ticks=0;f->jan_heal_phase=0;f->grabbed_ticks=0;f->ice_sword_ticks=0;f->held_oid=0;f->held_units=0;f->drinking=false;f->drink_tick=0;f->fusion_ticks=0;f->fusion_return_roster=-1;f->fusion_partner_roster=-1;f->fusion_partner_slot=-1;f->holding_slot=-1;f->caught_by=-1;f->thrown_by=-1;f->arest_ticks=0;memset(f->vrest_ticks,0,sizeof(f->vrest_ticks));set_frame(f,0);
 }
 
 static void reset_match(fighter_t *fighters,int cpu_count){

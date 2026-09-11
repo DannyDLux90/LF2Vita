@@ -19,6 +19,7 @@
 #include "fix3/game_18.inc"
 #include "fix3/game_19.inc"
 #include "fix3/game_20.inc"
+#include "fix3/game_stock_diag.inc"
 #include "fix3/game_21.inc"
 #include "fix3/game_22.inc"
 #include "fix3/game_23.inc"

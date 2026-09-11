@@ -17,16 +17,24 @@
                 resolved.dvx=ws->dvx;resolved.dvy=ws->dvy;resolved.fall=ws->fall;resolved.arest=ws->arest;resolved.vrest=ws->vrest;
                 resolved.bdefend=ws->bdefend;resolved.injury=ws->injury;resolved.effect=ws->effect;
             }
-            int dmg=resolved.injury>0?resolved.injury:1;
-            if(a->ai){
+            int authored=resolved.injury>0?resolved.injury:0;
+            int dmg=g_runtime_stock_compat?authored:(resolved.injury>0?resolved.injury:1);
+            if(!g_runtime_stock_compat&&a->ai){
                 if(difficulty==LF2_DIFF_EASY)dmg=dmg*4/5;
                 else if(difficulty==LF2_DIFF_DIFFICULT)dmg=dmg*11/10;
                 else if(difficulty==LF2_DIFF_CRAZY)dmg=dmg*5/4;
             }
-            if(b->frame==110)dmg=(dmg+3)/4;if(dmg<1)dmg=1;
+            int defended=stock_try_defend_hit(b,a->facing,&resolved,authored,&dmg);
+            if(!g_runtime_stock_compat&&b->frame==110)dmg=(dmg+3)/4;
+            if(!g_runtime_stock_compat&&dmg<1)dmg=1;
             int old=b->hp;b->hp-=dmg;if(b->hp<0)b->hp=0;if(b->hp==0)b->dead=true;
-            if(!b->dead)apply_hit_reaction(b,a->facing,&resolved);
-            lf2_audio_play(item_hit_sound(oid));spawn_hit_fx(world,b,0);
+            if(!defended){
+                stock_note_unblocked_hit(b);
+                if(!b->dead)apply_hit_reaction(b,a->facing,&resolved);
+                lf2_audio_play(item_hit_sound(oid));spawn_hit_fx(world,b,0);
+            }else if(b->dead){
+                apply_hit_reaction(b,a->facing,&resolved);
+            }
             if(a->held_units>0)a->held_units--;
             if(a->held_units<=0){
                 lf2_logf("ITEM","%s weapon broke oid=%d name=%s",a->def.name,oid,item_name(oid));
@@ -34,8 +42,8 @@
             }
             if(resolved.arest>0)a->arest_ticks=resolved.arest;
             if(resolved.vrest>0)a->vrest_ticks[bidx]=resolved.vrest;
-            lf2_logf("ITEM","weapon hit attacker=%s oid=%d target=%s hp=%d->%d frame=%d",
-                     a->def.name,oid,b->def.name,old,b->hp,wf_id);
+            lf2_logf("ITEM","weapon hit attacker=%s oid=%d target=%s hp=%d->%d frame=%d defend=%d",
+                     a->def.name,oid,b->def.name,old,b->hp,wf_id,defended);
             return 1;
         }
     }

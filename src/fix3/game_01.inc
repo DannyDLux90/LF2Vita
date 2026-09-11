@@ -98,6 +98,7 @@ typedef struct {
     int thrown_by;
     bool opoint_fired;
     int fall_points;
+    int bdefend_points;
     bool falling;
     int hit_flash;
     int frozen_ticks;
@@ -133,6 +134,7 @@ typedef struct {
 } fighter_t;
 
 static bool g_runtime_cheat=false;
+static bool g_runtime_stock_compat=false;
 static int load_fighter(fighter_t *f,int roster_idx,bool ai,int team,float x,float z,int facing,int slot,int hp);
 static void unload_fighter_slot(fighter_t *f);
 static int fighter_change_form(fighter_t *f,int roster_idx,int start_frame,const char *reason);

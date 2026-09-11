@@ -141,7 +141,7 @@ The hidden/internal replay path is now implemented for non-Stage fixtures:
 
 Stage replay execution is deliberately deferred until the Stage runtime can reproduce the stock recording state without inventing missing semantics.
 
-The stock runtime also logs a deterministic scalar state digest at TU 1 and every 30 TUs, including RNG indices/call count. This will be used to locate the first divergence once comparable Windows checkpoints are available.
+The stock runtime logs a deterministic scalar state digest at TU 1 and every 30 TUs, including RNG indices/call count. `src/fix3/game_stock_diag.inc` hashes explicit scalar fields only (not pointers/padding) and now includes the separate `bdefend` counter. This will be used to locate the first divergence once comparable Windows checkpoints are available.
 
 ## Combat parity already changed in stock mode
 
@@ -149,22 +149,33 @@ Where identified, Vita-only behavior is disabled while stock compatibility is ac
 
 - no victim-wide one-direct-hit-per-TU convenience latch;
 - no Vita-only CPU difficulty damage multiplier;
-- stock `arest` / per-victim `vrest` remain the repeat-hit mechanism.
+- stock `arest` / per-victim `vrest` remain the repeat-hit mechanism;
+- normal landed hits use authored `injury` rather than the Vita fallback/minimum-damage rules;
+- fighters now carry a distinct `bdefend` counter which decays by one point per 30-Hz TU;
+- a block is based on authored `state: 7`, not merely frame 110;
+- a successful stock block adds the ITR/weapon-strength `bdefend`, applies one tenth of authored `injury` with integer truncation, and uses frame 111 when appropriate;
+- grounded defense breaks to frame 112 once accumulated `bdefend` exceeds 30;
+- authored `bdefend > 60` bypasses normal defense;
+- an unblocked stock hit sets the victim `bdefend` counter to 45.
+
+The back-facing exception for negative `dvx` is included in the block test. Airborne or caught state-7 frames do not enter broken-defend even when their counter is above 30.
 
 Result counters are tracked for attack dealt, HP lost, kills, MP used and item picking.
 
-Important remaining combat mismatches include exact defense/bdefend handling, `fall`, armor/special defensive characters, grab/throw accounting, sustained effects, owner attribution, AI/RNG call order, and exact item/object processing order. The reverse-engineered Windows attack routine shows normal landed damage subtracting authored injury directly (after armor handling), while defended-hit paths use different accounting; the current Vita frame-110 shortcut is therefore still a compatibility target, not final behavior.
+Important remaining combat mismatches include exact `fall` reactions, armor/special defensive characters, the hard-coded `bdefend: 100` weapon/armor behavior, grab/throw accounting, sustained effects, owner attribution, AI/RNG call order, and exact item/object processing order. The current change deliberately does not guess the armor thresholds or the `bdefend: 100` weapon-destruction path.
 
 ## Build status
 
-A clean local VitaSDK build after the 1-on-1 team normalization succeeds. The internal VPK passes `unzip -t` and includes all ten optional local reference fixtures. This remains an engineering build, **not** the next user hardware-test VPK.
+The last clean local VitaSDK build after the 1-on-1 team normalization succeeded, and that internal VPK passed `unzip -t` with all ten optional local reference fixtures included.
 
-The critical split GitHub files for the current replay/stock path have been synchronized. In particular, `src/fix3/main_01.inc` and `main_09.inc` remain split wrappers; do not replace them with the local monolithic include files.
+While continuing from that handoff, the GitHub split was found to contain two source-sync defects that the prior local tree did not expose: `game_21.inc` passed an extra `stock_compat` argument to the existing hit functions, and it called `stock_state_digest()` without a definition in the branch. The current bdefend change restores the existing hit-function signatures, scopes stock behavior through the lockstep hit pass, and adds the missing deterministic digest implementation.
+
+This post-bdefend tree still needs a fresh VitaSDK compile/fixture run before it should be called a hardware-test build. It remains an engineering branch, **not** the next user hardware-test VPK.
 
 ## Next engineering tasks
 
-1. Replace the remaining approximate defend/frame-110 damage path with behavior derived from the stock `attack_process`, including bdefend accumulation/break logic where proven.
-2. Run the deterministic non-Stage fixtures on Vita and use `REFCMP`/`STOCK` diagnostics to fix the first reproducible simulation divergence.
+1. Clean-build the post-bdefend GitHub tree and run the deterministic non-Stage fixtures; use `REFCMP`/`STOCK` to identify the first reproducible simulation divergence.
+2. Resolve exact `fall` accumulation/reaction behavior, then armor and the special `bdefend: 100` path from Windows evidence rather than approximation.
 3. Finish exact result/stat accounting for status/self/grab/throw paths.
 4. Implement the stock 1-on-1 and 2-on-2 Championship menu/bracket state machines without assuming unverified timing.
 5. Map the opaque packet health/state checksum from a real Windows capture.

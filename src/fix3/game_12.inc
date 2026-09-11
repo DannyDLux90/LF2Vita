@@ -66,6 +66,35 @@ static void apply_sonata(fighter_t *b,const lf2_itr_def_t *it,int kind){
     }
 }
 
+/* Stock LF2 keeps broken-defense pressure in its own counter. A state-7 hit
+   from the front is blocked unless the authored itr explicitly bypasses
+   defense (bdefend > 60). Successful blocks add the itr's bdefend value,
+   apply one tenth of authored injury (integer floor), and transition 110->111.
+   Once the accumulated counter exceeds 30, grounded defense breaks to 112.
+   Airborne/caught state-7 frames keep blocking but cannot enter broken_defend. */
+static int stock_try_defend_hit(fighter_t *b,int attacker_facing,const lf2_itr_def_t *it,int injury,int *damage_out){
+    if(!g_runtime_stock_compat||!b||!it)return 0;
+    lf2_frame_def_t *bf=frame_def(b);
+    if(!bf||bf->state!=7||it->bdefend>60)return 0;
+    int front=(b->facing!=(attacker_facing?1:0));
+    if(!front&&it->dvx>=0)return 0;
+    if(it->bdefend>0)b->bdefend_points+=it->bdefend;
+    if(damage_out)*damage_out=injury>0?injury/10:0;
+    int breakable=(b->y>=0.0f&&b->vy==0.0f&&b->caught_by<0);
+    int broken=breakable&&b->bdefend_points>30;
+    if(broken&&b->def.frames[112].present)set_frame(b,112);
+    else if(b->frame==110&&b->def.frames[111].present)set_frame(b,111);
+    b->hit_flash=3;
+    lf2_audio_play("data/002.wav");
+    lf2_logf("DEFEND","%s block injury=%d damage=%d add=%d total=%d broken=%d",
+             b->def.name,injury,damage_out?*damage_out:0,it->bdefend,b->bdefend_points,broken);
+    return 1;
+}
+
+static void stock_note_unblocked_hit(fighter_t *b){
+    if(g_runtime_stock_compat&&b)b->bdefend_points=45;
+}
+
 static void apply_hit_reaction(fighter_t *b,int attacker_facing,const lf2_itr_def_t *it){
     if(!b||!it)return;int fall=it->fall?it->fall:20;if(fall>0)b->fall_points+=fall;
     int reaction=220;bool airborne=b->y<0.0f||b->vy!=0.0f;

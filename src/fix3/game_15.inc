@@ -11,24 +11,31 @@
             }
 
             int effect=it->effect;
-            int dmg=it->injury>0?it->injury:18;
+            int authored=it->injury>0?it->injury:0;
+            int dmg=g_runtime_stock_compat?authored:(it->injury>0?it->injury:18);
             /* Freeze's summoned Ice Sword is a held-weapon mechanic in the
                PC executable. The Vita runtime keeps the sword attached and
                gives melee contact its ice property while it is equipped. */
-            if(a->ice_sword_ticks>0 && effect==0){effect=3;dmg+=10;}
-            if(a->ai){
+            if(a->ice_sword_ticks>0 && effect==0){effect=3;if(!g_runtime_stock_compat)dmg+=10;}
+            if(!g_runtime_stock_compat&&a->ai){
                 if(difficulty==LF2_DIFF_EASY)dmg=(dmg*4)/5;
                 else if(difficulty==LF2_DIFF_DIFFICULT)dmg=(dmg*11)/10;
                 else if(difficulty==LF2_DIFF_CRAZY)dmg=(dmg*5)/4;
             }
-            if (b->frame==110) dmg=(dmg+3)/4;
-            if(dmg<1)dmg=1;
+            int defended=stock_try_defend_hit(b,a->facing,it,authored,&dmg);
+            if(!g_runtime_stock_compat&&b->frame==110)dmg=(dmg+3)/4;
+            if(!g_runtime_stock_compat&&dmg<1)dmg=1;
             b->hp-=dmg; if(b->hp<0)b->hp=0;
             if(b->hp==0)b->dead=true;
-            int status_applied=(!b->dead)?apply_elemental_status(b,effect,a->facing,it):0;
-            if(!status_applied&&!apply_caught_hurt_frame(b,a->facing))apply_hit_reaction(b,a->facing,it);
-            play_hit_sound(effect,it->fall?it->fall:20,dmg);
-            spawn_hit_fx(world,b,effect);
+            if(!defended){
+                stock_note_unblocked_hit(b);
+                int status_applied=(!b->dead)?apply_elemental_status(b,effect,a->facing,it):0;
+                if(!status_applied&&!apply_caught_hurt_frame(b,a->facing))apply_hit_reaction(b,a->facing,it);
+                play_hit_sound(effect,it->fall?it->fall:20,dmg);
+                spawn_hit_fx(world,b,effect);
+            }else if(b->dead){
+                apply_hit_reaction(b,a->facing,it);
+            }
             if(it->arest>0)a->arest_ticks=it->arest;if(it->vrest>0)a->vrest_ticks[bidx]=it->vrest;
             return;
         }

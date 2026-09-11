@@ -13,8 +13,9 @@
             for(int i=0;i<total;i++)fighters[i].direct_hurt_latched=false;
             int oldhp[LF2_MAX_CPUS+1];for(int i=0;i<total;i++)oldhp[i]=fighters[i].hp;
             bool stock_compat=options->lockstep_actor_map_enabled;
-            for(int a=0;a<total;a++)for(int b=0;b<total;b++)if(a!=b)apply_hits(world,fighters,total,a,b,difficulty,stock_compat);
-            for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)object_apply_hits(world,&world->objects[i],fighters,total,difficulty,stock_compat);
+            g_runtime_stock_compat=stock_compat;
+            for(int a=0;a<total;a++)for(int b=0;b<total;b++)if(a!=b)apply_hits(world,fighters,total,a,b,difficulty);
+            for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)object_apply_hits(world,&world->objects[i],fighters,total,difficulty);
             update_hit_fx(world);
             for(int i=0;i<total;i++)if(fighters[i].hp!=oldhp[i]){
                 if(i==0)lf2_logf("HIT","P1 %s hp %d -> %d",fighters[i].def.name,oldhp[i],fighters[i].hp);
@@ -61,6 +62,7 @@
             i,fighters[i].def.name,fighters[i].team,fighters[i].hp,fighters[i].stat_attack,fighters[i].stat_hp_lost,
             fighters[i].stat_kills,fighters[i].stat_mp_used,fighters[i].stat_picking);
     }
+    g_runtime_stock_compat=false;
     vita2d_wait_rendering_done();
     for(int i=0;i<total;i++){if(fighters[i].hud_face)vita2d_free_texture(fighters[i].hud_face);lf2_free_character_textures(&fighters[i].def);}
     world_shutdown(world);free(world);free(fighters);lf2_log_memory("match cleanup");return result;

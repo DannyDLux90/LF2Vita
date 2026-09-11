@@ -1,4 +1,5 @@
 static int adhoc_browser(bool cheat){
+    if(adhoc_ensure_system_link()<0)return 0;
     int rc=lf2_adhoc_browser_start();if(rc<0){char e[220];snprintf(e,sizeof(e),"AdHoc-Initialisierung fehlgeschlagen. %s",lf2_adhoc_error());wait_message("AdHoc Fehler",e);return 0;}
     int sel=0,scroll=0;uint32_t prev=sync_buttons();uint64_t last_probe=0;
     net_browser_filter_t filter={5,4,0,0,0,0};

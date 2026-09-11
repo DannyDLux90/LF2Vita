@@ -32,5 +32,5 @@ int main(void){
         if(rc<0){lf2_logf("ERROR","filecheck failed rc=%d error=%s",rc,error);wait_message("Dateicheck fehlgeschlagen",error[0]?error:"Unbekannter Fehler beim Prüfen der Spieldateien.");}
         else {int arc=lf2_audio_init();lf2_logf("INFO","audio init rc=%d ready=%d",arc,lf2_audio_ready());main_menu(mode==LAUNCH_CHEAT);}
     }
-    lf2_log_stage("shutdown:resources","");lf2_adhoc_shutdown();lf2_audio_shutdown();lf2_pak_shutdown();free_ui_assets();lf2_log_shutdown(1);sceKernelExitProcess(0);return 0;
+    lf2_log_stage("shutdown:resources","");adhoc_system_link_shutdown();lf2_adhoc_shutdown();lf2_audio_shutdown();lf2_pak_shutdown();free_ui_assets();lf2_log_shutdown(1);sceKernelExitProcess(0);return 0;
 }

@@ -71,7 +71,10 @@ typedef struct __attribute__((packed)) {
     char vita_version[LF2_NET_VERSION_MAX];
 } join_t;
 
-typedef enum { PKT_LOBBY=1, PKT_PLAYER=2, PKT_PING=3, PKT_PONG=4 } packet_type_t;
+typedef enum {
+    PKT_LOBBY=1, PKT_PLAYER=2, PKT_PING=3, PKT_PONG=4,
+    PKT_MATCH_INPUT=5
+} packet_type_t;
 
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -99,6 +102,20 @@ typedef struct __attribute__((packed)) {
     packet_hdr_t h;
     uint64_t stamp_us;
 } ping_packet_t;
+
+typedef struct __attribute__((packed)) {
+    packet_hdr_t h;
+    uint32_t match_id;
+    uint32_t frame;
+    uint32_t held;
+} match_input_packet_t;
+
+typedef struct {
+    bool valid;
+    uint32_t match_id;
+    uint32_t frame;
+    uint32_t held;
+} match_input_cache_t;
 
 typedef struct {
     int event;
@@ -157,6 +174,10 @@ static bool g_have_join_host;
 static uint8_t g_local_character;
 static uint8_t g_local_ready;
 static uint32_t g_last_logged_revision;
+static bool g_native_match_active;
+static uint32_t g_native_match_id;
+static uint32_t g_native_match_frame;
+static match_input_cache_t g_match_inputs[16];
 static bool g_mutex_ready;
 static bool g_mod_net_loaded,g_mod_adhoc_loaded,g_mod_matching_loaded;
 static bool g_net_ready,g_netctl_ready,g_adhoc_ready,g_ctl_ready,g_matching_ready;

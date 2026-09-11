@@ -100,6 +100,13 @@ int lf2_adhoc_lobby_set_character(int character);
 int lf2_adhoc_lobby_set_ready(bool ready);
 int lf2_adhoc_lobby_host_settings(const lf2_net_settings_t *settings);
 int lf2_adhoc_lobby_host_status(lf2_net_status_t status);
+
+/* Native Vita-to-Vita 30 Hz lockstep. The first gameplay implementation is
+   deliberately limited to the already synchronized two-player VS lobby. */
+int lf2_adhoc_match_begin(uint32_t match_id);
+bool lf2_adhoc_lockstep_frame(void *userdata, uint32_t local_held[4], uint32_t remote_held[4]);
+void lf2_adhoc_match_end(void);
+
 void lf2_adhoc_leave(void);
 
 const char *lf2_net_mode_name(int mode);

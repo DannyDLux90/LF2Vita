@@ -42,13 +42,53 @@ static void net70_draw_player_card(float x,float y,float w,float h,const lf2_net
     net70_text(x+w-82,y+58,0.60f,p->ready?RGBA8(117,236,151,255):RGBA8(245,205,111,255),p->ready?"BEREIT":"WAHL");
 }
 
+static int net70_run_adhoc_vs_match(uint32_t match_id){
+    const lf2_adhoc_lobby_t *l=lf2_adhoc_lobby();
+    if(!l||!l->connected||l->settings.mode!=LF2_NET_MODE_VS)return -1;
+    int guest=-1,present=0;
+    for(int i=0;i<LF2_ADHOC_MAX_PLAYERS;i++)if(l->players[i].present){present++;if(i>0&&guest<0)guest=i;}
+    if(present!=2||guest<1)return -2;
+    int host_char=l->players[0].character,guest_char=l->players[guest].character;
+    if(host_char<0||host_char>=lf2_roster_count||guest_char<0||guest_char>=lf2_roster_count)return -3;
+    int stage=(l->settings.stage<STAGE_COUNT)?l->settings.stage:0;
+    int difficulty=l->settings.difficulty;
+    if(difficulty<LF2_DIFF_EASY||difficulty>LF2_DIFF_CRAZY)difficulty=LF2_DIFF_NORMAL;
+    bool net_cheat=l->settings.allow_cheat!=0;
+    lf2_log_stage("network:adhoc_match_launch","id=%u role=%s host_char=%s client_char=%s stage=%d diff=%s cheat=%d",
+                  (unsigned)match_id,l->host?"host":"client",lf2_roster[host_char].name,lf2_roster[guest_char].name,
+                  stage,ui_diff_name(difficulty),net_cheat?1:0);
+    if(lf2_adhoc_match_begin(match_id)<0)return -4;
+    vita2d_texture *bg=load_stage_texture(stage);
+    if(!bg){lf2_adhoc_match_end();return -5;}
+    int cpus[1]={guest_char};int teams[1]={2};
+    lf2_match_options_t opt={0};
+    opt.allow_rematch=false;
+    opt.hud_label="AdHoc VS";
+    opt.lockstep_actor_map_enabled=true;
+    opt.lockstep_actor_control[0]=1; /* host input */
+    opt.lockstep_actor_control[1]=5; /* joining Vita input */
+    opt.lockstep_frame=lf2_adhoc_lockstep_frame;
+    opt.remote_userdata=NULL;
+    int rc=lf2_run_match_ex(g_font,bg,host_char,1,cpus,teams,1,difficulty,net_cheat,&opt);
+    free_stage_texture(bg);
+    lf2_adhoc_match_end();
+    lf2_log_stage("network:adhoc_match_return","id=%u role=%s rc=%d",(unsigned)match_id,l->host?"host":"client",rc);
+    return rc;
+}
+
 static int adhoc_lobby_screen(bool cheat){
-    int setting_sel=0;uint32_t prev=sync_buttons();uint64_t lobby_opened=sceKernelGetSystemTimeWide();
+    int setting_sel=0;uint32_t prev=sync_buttons();uint64_t lobby_opened=sceKernelGetSystemTimeWide();uint32_t last_started_revision=0;
     for(;;){
         lf2_adhoc_lobby_update();const lf2_adhoc_lobby_t *l=lf2_adhoc_lobby();
         SceCtrlData p={0};sceCtrlPeekBufferPositive(0,&p,1);uint32_t pr=p.buttons&~prev;prev=p.buttons;
         if(pr&SCE_CTRL_CIRCLE){ui_cancel();lf2_adhoc_leave();return 0;}
         if(!l->connected&&!l->host&&sceKernelGetSystemTimeWide()-lobby_opened>8000000ULL){ui_cancel();wait_message("AdHoc","Verbindung zum Host verloren oder Zeitueberschreitung.");lf2_adhoc_leave();return 0;}
+        if(!l->host&&l->connected&&l->settings.status==LF2_NET_STATUS_STARTING&&l->revision!=last_started_revision){
+            uint32_t match_id=l->revision;last_started_revision=match_id;
+            int mrc=net70_run_adhoc_vs_match(match_id);
+            if(mrc<0){char e[128];snprintf(e,sizeof(e),"Netzwerkspiel konnte nicht gestartet werden (Fehler %d).",mrc);wait_message("AdHoc-Spiel",e);}
+            prev=sync_buttons();continue;
+        }
         if(pr&SCE_CTRL_LTRIGGER){int slot=l->host?0:l->local_slot;int c=(slot>=0&&slot<8&&l->players[slot].present)?l->players[slot].character:0;lf2_adhoc_lobby_set_character(net70_next_roster(cheat,c,-1));ui_join();}
         if(pr&SCE_CTRL_RTRIGGER){int slot=l->host?0:l->local_slot;int c=(slot>=0&&slot<8&&l->players[slot].present)?l->players[slot].character:0;lf2_adhoc_lobby_set_character(net70_next_roster(cheat,c,1));ui_join();}
         if(pr&SCE_CTRL_SQUARE){int slot=l->host?0:l->local_slot;bool r=(slot>=0&&slot<8&&l->players[slot].present)?!l->players[slot].ready:true;lf2_adhoc_lobby_set_ready(r);ui_ok();}
@@ -65,7 +105,16 @@ static int adhoc_lobby_screen(bool cheat){
             }
             if(pr&SCE_CTRL_START){
                 int present=0,ready=0;for(int i=0;i<8;i++)if(l->players[i].present){present++;if(l->players[i].ready)ready++;}
-                if(present>=2&&ready==present){lf2_adhoc_lobby_host_status(LF2_NET_STATUS_STARTING);ui_ok();wait_message("AdHoc-Lobby","Lobby-Synchronisation ist bereit. Der deterministische 30-Hz-Kampf-Lockstep wird als naechster 0.7X-Schritt angeschlossen.");lf2_adhoc_lobby_host_status(LF2_NET_STATUS_WAITING);prev=sync_buttons();}
+                if(present==2&&ready==present&&l->settings.mode==LF2_NET_MODE_VS){
+                    lf2_adhoc_lobby_host_status(LF2_NET_STATUS_STARTING);
+                    l=lf2_adhoc_lobby();uint32_t match_id=l->revision;last_started_revision=match_id;ui_ok();
+                    int mrc=net70_run_adhoc_vs_match(match_id);
+                    lf2_adhoc_lobby_host_status(LF2_NET_STATUS_WAITING);
+                    lf2_adhoc_lobby_set_ready(false);
+                    if(mrc<0){char e[128];snprintf(e,sizeof(e),"Netzwerkspiel wurde getrennt oder konnte nicht starten (Fehler %d).",mrc);wait_message("AdHoc-Spiel",e);}
+                    prev=sync_buttons();
+                } else if(present!=2){wait_message("AdHoc-Spiel","Der erste Kampf-Lockstep ist fuer genau zwei Vitas ausgelegt.");prev=sync_buttons();}
+                else if(l->settings.mode!=LF2_NET_MODE_VS){wait_message("AdHoc-Spiel","Aktuell startet der Vita-Lockstep zuerst im VS-Modus.");prev=sync_buttons();}
                 else {ui_cancel();}
             }
         }

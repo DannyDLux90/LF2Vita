@@ -14,4 +14,71 @@ int lf2_adhoc_lobby_set_character(int c){if(!g_lobby.active)return -1;g_local_ch
 int lf2_adhoc_lobby_set_ready(bool r){if(!g_lobby.active)return -1;g_local_ready=r?1:0;if(g_host){g_lobby.players[0].ready=g_local_ready;g_lobby.revision++;lf2_logf("NET","host ready=%u rev=%u",g_local_ready,g_lobby.revision);broadcast_lobby();}else{int s=g_lobby.local_slot;if(s>=0)g_lobby.players[s].ready=g_local_ready;send_player_update();}return 0;}
 int lf2_adhoc_lobby_host_settings(const lf2_net_settings_t *s){if(!g_host||!g_lobby.active)return -1;g_lobby.settings=*s;int present=0;for(int i=0;i<LF2_ADHOC_MAX_PLAYERS;i++)if(g_lobby.players[i].present)present++;if(g_lobby.settings.max_players<present)g_lobby.settings.max_players=(uint8_t)present;if(g_lobby.settings.max_players<2)g_lobby.settings.max_players=2;if(g_lobby.settings.max_players>8)g_lobby.settings.max_players=8;g_lobby.revision++;lf2_logf("NET","host settings rev=%u mode=%s max=%u stage=%u difficulty=%u",g_lobby.revision,lf2_net_mode_name(g_lobby.settings.mode),g_lobby.settings.max_players,g_lobby.settings.stage,g_lobby.settings.difficulty);broadcast_lobby();return 0;}
 int lf2_adhoc_lobby_host_status(lf2_net_status_t st){if(!g_host)return -1;g_lobby.settings.status=(uint8_t)st;g_lobby.revision++;lf2_logf("NET","host status=%s rev=%u",lf2_net_status_name(st),g_lobby.revision);broadcast_lobby();return 0;}
-void lf2_adhoc_leave(void){lf2_log_stage("network:adhoc_leave","host=%d connected=%d",g_host?1:0,g_lobby.connected?1:0);if(g_match>=0)clear_match();memset(&g_lobby,0,sizeof(g_lobby));g_host=false;g_browser=false;g_joining=false;g_local_ready=0;g_last_logged_revision=0;}
+void lf2_adhoc_leave(void){lf2_log_stage("network:adhoc_leave","host=%d connected=%d",g_host?1:0,g_lobby.connected?1:0);lf2_adhoc_match_end();if(g_match>=0)clear_match();memset(&g_lobby,0,sizeof(g_lobby));g_host=false;g_browser=false;g_joining=false;g_local_ready=0;g_last_logged_revision=0;}
+
+
+static bool native_match_peer_addr(SceNetInAddr *out){
+    if(!out||g_match<0||!g_lobby.connected)return false;
+    if(!g_host){if(!g_have_join_host)return false;*out=g_join_host_addr;return true;}
+    peer_t *only=NULL;
+    for(int i=0;i<LF2_ADHOC_MAX_PLAYERS;i++)if(g_peers[i].used){if(only)return false;only=&g_peers[i];}
+    if(!only)return false;*out=only->addr;return true;
+}
+
+static bool native_match_service_event(const queued_event_t *e){
+    if(!e)return true;
+    if(e->event==MATCH_DATA){process_packet(e);return true;}
+    if(e->event==MATCH_LEFT||e->event==MATCH_DISCONNECT||e->event==MATCH_TIMEOUT||e->event==MATCH_REJECT||e->event==MATCH_CANCEL||e->event==MATCH_ERROR||e->event==MATCH_DATA_TIMEOUT){
+        g_lobby.connected=false;g_native_match_active=false;
+        lf2_logf("NET","native match peer ended event=%d addr=%08X",e->event,(unsigned)e->addr.s_addr);
+        return false;
+    }
+    return true;
+}
+
+int lf2_adhoc_match_begin(uint32_t match_id){
+    SceNetInAddr peer;
+    if(!match_id||!native_match_peer_addr(&peer)){lf2_logf("NET","native match begin rejected id=%u host=%d connected=%d",(unsigned)match_id,g_host?1:0,g_lobby.connected?1:0);return -1;}
+    /* Keep already queued frame 0 for this match. The joining Vita may have
+       drained STARTING and the host's first input in one lobby update before
+       entering the game runner. Only discard packets from older matches. */
+    for(unsigned i=0;i<sizeof(g_match_inputs)/sizeof(g_match_inputs[0]);i++)
+        if(g_match_inputs[i].valid&&g_match_inputs[i].match_id!=match_id)g_match_inputs[i].valid=false;
+    g_native_match_id=match_id;g_native_match_frame=0;g_native_match_active=true;
+    lf2_log_stage("network:adhoc_match_begin","id=%u role=%s peer=%08X",(unsigned)match_id,g_host?"host":"client",(unsigned)peer.s_addr);
+    return 0;
+}
+
+bool lf2_adhoc_lockstep_frame(void *userdata,uint32_t local_held[4],uint32_t remote_held[4]){
+    (void)userdata;
+    if(!g_native_match_active||!local_held||!remote_held)return false;
+    SceNetInAddr peer;if(!native_match_peer_addr(&peer)){g_native_match_active=false;return false;}
+    const uint32_t frame=g_native_match_frame;
+    const uint32_t physical_local=local_held[0];
+    match_input_packet_t p;memset(&p,0,sizeof(p));p.h.magic=LF2_NET_MAGIC;p.h.proto=LF2_ADHOC_PROTO_VERSION;p.h.type=PKT_MATCH_INPUT;p.h.size=sizeof(p);p.h.seq=g_seq++;p.match_id=g_native_match_id;p.frame=frame;p.held=physical_local;
+
+    uint64_t deadline=now_us()+5000000ULL;bool sent=false,got=false;uint32_t peer_held=0;
+    while(now_us()<deadline){
+        if(!sent){int rc=send_to(&peer,&p,sizeof(p));if(rc>=0)sent=true;else if(rc!=SCE_NET_ADHOC_MATCHING_ERROR_DATA_BUSY){g_native_match_active=false;return false;}}
+        queued_event_t e;bool any=false;while(pop_event(&e)){any=true;if(!native_match_service_event(&e))return false;}
+        if(take_match_input(g_native_match_id,frame,&peer_held))got=true;
+        if(sent&&got)break;
+        if(!any)sceKernelDelayThread(500);
+    }
+    if(!sent||!got){lf2_logf("NET","native lockstep timeout id=%u frame=%u sent=%d got=%d",(unsigned)g_native_match_id,(unsigned)frame,sent?1:0,got?1:0);g_native_match_active=false;return false;}
+
+    /* Both simulations always use actor 0 = host and actor 1 = client. On the
+       joining Vita swap the physical/local side after transport so the game
+       receives the same logical control arrays on both machines. */
+    memset(remote_held,0,sizeof(uint32_t)*4);
+    if(g_host){local_held[0]=physical_local;remote_held[0]=peer_held;}
+    else {local_held[0]=peer_held;remote_held[0]=physical_local;}
+    g_native_match_frame++;
+    if(frame==0||(frame%300u)==0u)lf2_logf("NET","native lockstep id=%u frame=%u hostmask=%02X clientmask=%02X",(unsigned)g_native_match_id,(unsigned)frame,(unsigned)(local_held[0]&0xffu),(unsigned)(remote_held[0]&0xffu));
+    return true;
+}
+
+void lf2_adhoc_match_end(void){
+    if(g_native_match_active)lf2_log_stage("network:adhoc_match_end","id=%u frames=%u role=%s",(unsigned)g_native_match_id,(unsigned)g_native_match_frame,g_host?"host":"client");
+    g_native_match_active=false;g_native_match_id=0;g_native_match_frame=0;memset(g_match_inputs,0,sizeof(g_match_inputs));
+}

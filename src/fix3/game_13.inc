@@ -71,6 +71,7 @@ static void object_apply_hits(object_world_t *w,world_object_t *o,fighter_t *fig
                     if(b->frame==110)dmg=(dmg+3)/4;if(dmg<1)dmg=1;
                     int old=b->hp;b->hp-=dmg;if(b->hp<0)b->hp=0;
                     if(b->hp==0)b->dead=true;
+                    fighter_stat_damage((o->owner>=0&&o->owner<total)?&fighters[o->owner]:NULL,b,old);
                     int status_applied=(!b->dead)?apply_elemental_status(b,it->effect,o->facing,it):0;
                     if(!status_applied&&!apply_caught_hurt_frame(b,o->facing))apply_hit_reaction(b,o->facing,it);
                     play_hit_sound(it->effect,it->fall?it->fall:20,dmg);spawn_hit_fx(w,b,it->effect);
@@ -92,5 +93,3 @@ static void world_shutdown(object_world_t *w){if(!w)return;vita2d_wait_rendering
 
 static int apply_held_weapon_hit(object_world_t *world,fighter_t *a,fighter_t *b,int aidx,int bidx,int difficulty){
     if(!world||!a||!b||!a->held_oid||item_is_bottle(a->held_oid)||a->arest_ticks>0||bidx<0||bidx>=LF2_MAX_ACTORS||a->vrest_ticks[bidx]>0)return 0;
-    lf2_frame_def_t *af=frame_def(a),*bf=frame_def(b);
-    if(!af||!bf||bf->bdy_count<=0||!af->wpoint.present||af->wpoint.attacking<=0)return 0;

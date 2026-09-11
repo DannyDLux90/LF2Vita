@@ -2,6 +2,7 @@
 #include "audio.h"
 #include "lf2_data.h"
 #include "lf2_core.h"
+#include "lf2_rng.h"
 #include "log.h"
 #include "ui_font.h"
 
@@ -32,7 +33,6 @@ static int lf2_pgf_draw_textf_shadow(vita2d_pgf *font,int x,int y,unsigned color
 #define vita2d_pgf_draw_text  lf2_pgf_draw_text_shadow
 #define vita2d_pgf_draw_textf lf2_pgf_draw_textf_shadow
 
-
 const lf2_roster_entry_t lf2_roster[] = {
     {"Deep",     "data/deep.dat",     "sprite/sys/deep_f.bmp",     false},
     {"John",     "data/john.dat",     "sprite/sys/john_f.bmp",     false},
@@ -62,8 +62,6 @@ const int lf2_roster_count = (int)(sizeof(lf2_roster)/sizeof(lf2_roster[0]));
 
 typedef struct {
     bool left,right,up,down,attack,jump,defend,run,pickup;
-    /* Vita shortcuts are split into the two LF2 command families so hidden
-       characters without hit_Fa (Firzen/Jan) remain fully controllable. */
     bool special_attack,special_jump;
     bool attack_pressed,jump_pressed,defend_pressed,pickup_pressed;
     bool special_attack_pressed,special_jump_pressed;
@@ -73,8 +71,13 @@ typedef struct {
     lf2_character_def_t def;
     float x,y,z;
     float vx,vy,vz;
-    int facing; /* 0 right, 1 left */
+    int facing;
     int hp,max_hp,mp;
+    int stat_attack;
+    int stat_hp_lost;
+    int stat_kills;
+    int stat_mp_used;
+    int stat_picking;
     int frame;
     int ticks;
     int walk_phase;
@@ -82,10 +85,12 @@ typedef struct {
     int invuln;
     int ai_cooldown;
     bool ai;
+    unsigned char human_no;
     bool active;
-    int team; /* 0 = Independent, 1..4 = Team */
+    int team;
     bool dead;
-    bool hit_latched; /* legacy field; v0.69 uses arest/vrest instead */
+    bool hit_latched;
+    bool direct_hurt_latched;
     int arest_ticks;
     int vrest_ticks[LF2_MAX_ACTORS];
     int holding_slot;
@@ -95,23 +100,18 @@ typedef struct {
     int fall_points;
     bool falling;
     int hit_flash;
-    /* v0.65: authored LF2 status/reaction state. These timers are simulation
-       ticks (30 Hz), not render frames. */
     int frozen_ticks;
     int burn_ticks;
     int sonata_ticks;
     int sonata_damage_cooldown;
     int status_age;
     int mp_regen_tick;
-    /* Jan Angel regeneration: stock hit_Fa:4 applies a 100-tu heal status. */
     int jan_heal_ticks;
     int jan_heal_phase;
-    /* v0.66 hard-coded LF2 type-0 mechanics that are not expressible by
-       ordinary frame chaining alone. */
     int roster_idx;
-    int transform_origin;      /* Rudolf roster index while impersonating, -1 otherwise */
+    int transform_origin;
     int transform_target;
-    int fusion_ticks;          /* remaining Firzen fusion time units */
+    int fusion_ticks;
     int fusion_return_roster;
     int fusion_partner_roster;
     int fusion_partner_slot;
@@ -122,7 +122,6 @@ typedef struct {
     bool clone;
     int grabbed_ticks;
     int ice_sword_ticks;
-    /* v0.66 stock pickup/weapon state. held_oid uses original data.txt IDs. */
     int held_oid;
     int held_units;
     bool drinking;
@@ -130,8 +129,6 @@ typedef struct {
     unsigned frame_serial;
     unsigned state_processed_serial;
     vita2d_texture *hud_face;
-    /* Stage Mode can share one preloaded read-only DAT/texture set between
-       several enemy slots. Ordinary match fighters own their assets. */
     bool owns_assets;
 } fighter_t;
 
@@ -139,6 +136,7 @@ static bool g_runtime_cheat=false;
 static int load_fighter(fighter_t *f,int roster_idx,bool ai,int team,float x,float z,int facing,int slot,int hp);
 static void unload_fighter_slot(fighter_t *f);
 static int fighter_change_form(fighter_t *f,int roster_idx,int start_frame,const char *reason);
+static void stock_account_damage(fighter_t *fighters,int total,int attacker_idx,int target_idx,int injury,int old_hp);
 static int item_is_bottle(int oid);
 static int item_is_heavy(int oid);
 

@@ -1,19 +1,3 @@
-                in=make_ai_input(p,target,difficulty);
-                if(target&&!in_action(p)&&p->frame!=110)p->facing=(target->x<p->x);
-            } else {
-                in=make_player_input(&pad,pending_pressed);
-            }
-            pending_pressed=0;if(!handle_form_input(fighters,total,0,&in)){fighter_handle_item_input(world,p,&in);handle_catch_input(fighters,total,0,&in);update_control(p,&in);}process_frame_state(fighters,total,0,world);
-            /* Human P1 keeps the direction chosen by movement. AI-controlled P1
-               (Demo) faces its target just like the other computer slots. */
-            for(int i=1;i<total;i++){
-                fighter_t *c=&fighters[i];
-                fighter_t *target=nearest_living_enemy(c,fighters,total);
-                input_t ai=target?make_ai_input(c,target,difficulty):make_ai_retreat_input(c,nearest_lying_enemy(c,fighters,total));
-                if(!handle_form_input(fighters,total,i,&ai)){fighter_handle_item_input(world,c,&ai);handle_catch_input(fighters,total,i,&ai);update_control(c,&ai);}process_frame_state(fighters,total,i,world);
-                if(target&&!in_action(c)&&c->frame!=110)c->facing=(target->x<c->x);
-            }
-
             sync_all_catches(fighters,total);
             check_firzen_fusion(fighters,total,world);tick_fusion(fighters,total);
             item_director_tick(world,&item_drop_timer);
@@ -26,21 +10,58 @@
             for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)update_object(world,&world->objects[i],fighters,total);
             object_apply_reflections(world);
 
+            for(int i=0;i<total;i++)fighters[i].direct_hurt_latched=false;
             int oldhp[LF2_MAX_CPUS+1];for(int i=0;i<total;i++)oldhp[i]=fighters[i].hp;
-            for(int a=0;a<total;a++)for(int b=0;b<total;b++)if(a!=b)apply_hits(world,fighters,total,a,b,difficulty);
-            for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)object_apply_hits(world,&world->objects[i],fighters,total,difficulty);
+            bool stock_compat=options->lockstep_actor_map_enabled;
+            for(int a=0;a<total;a++)for(int b=0;b<total;b++)if(a!=b)apply_hits(world,fighters,total,a,b,difficulty,stock_compat);
+            for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)object_apply_hits(world,&world->objects[i],fighters,total,difficulty,stock_compat);
             update_hit_fx(world);
             for(int i=0;i<total;i++)if(fighters[i].hp!=oldhp[i]){
                 if(i==0)lf2_logf("HIT","P1 %s hp %d -> %d",fighters[i].def.name,oldhp[i],fighters[i].hp);
+                else if(fighters[i].human_no==2)lf2_logf("HIT","P2 %s hp %d -> %d",fighters[i].def.name,oldhp[i],fighters[i].hp);
                 else lf2_logf("HIT","CPU%d %s hp %d -> %d",i,fighters[i].def.name,oldhp[i],fighters[i].hp);
             }
+            if(stock_compat){
+                stock_tu++;
+                if(stock_tu==1||(stock_tu%30u)==0u){
+                    uint32_t digest=stock_state_digest(fighters,total,world,item_drop_timer);
+                    lf2_logf("STOCK","tu=%u packet=%u digest=%08X rng_i=%u rng_j=%u rng_calls=%u",
+                             (unsigned)stock_tu,(unsigned)((stock_tu-1u)/2u),digest,
+                             (unsigned)lf2_rng_stock_i(),(unsigned)lf2_rng_stock_j(),(unsigned)lf2_rng_calls());
+                }
+                if(reference_mode&&stock_tu>=options->reference_tu_limit){
+                    int ref_side_alive=player_side_alive(fighters,total);
+                    int ref_enemies_alive=player_has_enemy(fighters,total);
+                    result=(ref_side_alive&&!ref_enemies_alive)?LF2_MATCH_WIN:
+                           (!ref_side_alive&&ref_enemies_alive)?LF2_MATCH_LOSS:LF2_MATCH_CANCEL;
+                    lf2_logf("REF","exact TU limit reached tu=%u result=%d side_alive=%d enemies_alive=%d rng_calls=%u",
+                             (unsigned)stock_tu,result,ref_side_alive,ref_enemies_alive,(unsigned)lf2_rng_calls());
+                    reference_done=true;
+                }
+            }
             acc_us-=sim_step_us;
+            if(reference_done)break;
         }
+        if(network_abort||reference_done)break;
         draw_match(font,stage_bg,fighters,world,cpu_count,difficulty,cheat_enabled,false,options);
     }
     if(options->player_hp_out)*options->player_hp_out=fighters[0].hp;
     if(options->player_mp_out)*options->player_mp_out=fighters[0].mp;
-    lf2_log_stage("match:cleanup","result=%d cpus=%d p1_hp=%d p1_mp=%d",result,cpu_count,fighters[0].hp,fighters[0].mp);vita2d_wait_rendering_done();
+    if(options->stock_stats_count_out)*options->stock_stats_count_out=loaded;
+    if(options->stock_stats_out&&options->stock_stats_capacity>0){
+        int n=loaded<options->stock_stats_capacity?loaded:options->stock_stats_capacity;
+        for(int i=0;i<n;i++)options->stock_stats_out[i]=(lf2_stock_stat_t){
+            .roster_idx=fighters[i].roster_idx,.team=fighters[i].team,.hp=fighters[i].hp,
+            .attack=fighters[i].stat_attack,.hp_lost=fighters[i].stat_hp_lost,.kills=fighters[i].stat_kills,
+            .mp_used=fighters[i].stat_mp_used,.picking=fighters[i].stat_picking,.dead=fighters[i].dead?1:0};
+    }
+    lf2_log_stage("match:cleanup","result=%d cpus=%d p1_hp=%d p1_mp=%d",result,cpu_count,fighters[0].hp,fighters[0].mp);
+    if(options->lockstep_actor_map_enabled){
+        for(int i=0;i<loaded;i++)lf2_logf("STOCKSTAT","actor=%d char=%s team=%d hp=%d attack=%d hp_lost=%d kills=%d mp_used=%d picking=%d",
+            i,fighters[i].def.name,fighters[i].team,fighters[i].hp,fighters[i].stat_attack,fighters[i].stat_hp_lost,
+            fighters[i].stat_kills,fighters[i].stat_mp_used,fighters[i].stat_picking);
+    }
+    vita2d_wait_rendering_done();
     for(int i=0;i<total;i++){if(fighters[i].hud_face)vita2d_free_texture(fighters[i].hud_face);lf2_free_character_textures(&fighters[i].def);}
     world_shutdown(world);free(world);free(fighters);lf2_log_memory("match cleanup");return result;
 }

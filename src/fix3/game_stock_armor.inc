@@ -23,6 +23,17 @@ static int stock_armor_state_disabled(int state){
     return state==8||state==11||state==12||state==13||state==14||state==16||state==18;
 }
 
+/* Stock armor remains active while caught, but its bdefend recovery is held.
+   Preserve the counter across the underlying TU update for the three built-in
+   armored characters only; native Vita/Stage and ordinary fighters are not
+   affected. */
+static void update_control(fighter_t *f,const input_t *in){
+    int hold=-1;
+    if(g_runtime_stock_compat&&f&&f->caught_by>=0&&stock_armor_threshold(f)>=0)hold=f->bdefend_points;
+    stock_hitlag_update_control(f,in);
+    if(hold>=0)f->bdefend_points=hold;
+}
+
 static int stock_try_armor_hit(fighter_t *b,const lf2_itr_def_t *it,int injury,int *damage_out){
     if(!g_runtime_stock_compat||!b||!it)return 0;
     int threshold=stock_armor_threshold(b);

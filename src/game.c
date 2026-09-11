@@ -5,11 +5,13 @@
 #include "fix3/game_02.inc"
 #undef in_action
 
-/* The hitlag layer owns the first-stage defend wrapper. Rename only that
-   symbol while including it so the armor layer can add the hard-coded stock
-   character armor behind normal state-7 defense. */
+/* The hitlag layer owns the first-stage defend/update wrappers. Rename those
+   symbols while including it so the armor layer can add the hard-coded stock
+   character armor and caught-recovery exception behind them. */
 #define stock_try_defend_hit stock_hitlag_try_defend_hit
+#define update_control stock_hitlag_update_control
 #include "fix3/game_stock_hitlag.inc"
+#undef update_control
 #undef stock_try_defend_hit
 #include "fix3/game_stock_armor.inc"
 

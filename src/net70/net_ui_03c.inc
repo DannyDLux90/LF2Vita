@@ -1,10 +1,3 @@
-                    else{ui_ok();if(lf2_adhoc_join(si,0)<0){wait_message("AdHoc Fehler",lf2_adhoc_error());prev=sync_buttons();}else{adhoc_lobby_screen(cheat);lf2_adhoc_browser_start();sel=0;scroll=0;prev=sync_buttons();}}
-                }else if(sel==vn){ui_ok();lf2_adhoc_browser_stop();adhoc_create_game(cheat);lf2_adhoc_browser_start();sel=0;scroll=0;prev=sync_buttons();}
-                else{ui_cancel();lf2_adhoc_browser_stop();return 0;}
-            }
-        }
-
-        if(sel<scroll)scroll=sel;if(sel>=scroll+5)scroll=sel-4;if(scroll>vn)scroll=vn;
         vita2d_start_drawing();vita2d_clear_screen();draw_full_texture(g_menu_bg);vita2d_draw_rectangle(20,24,920,496,RGBA8(2,22,69,247));
         if(lf2_ui_font_ready()){
             lf2_ui_draw_text(42,37,0.91f,RGBA8(255,255,255,255),"AdHoc Serverbrowser");

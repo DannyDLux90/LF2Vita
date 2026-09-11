@@ -8,9 +8,11 @@
 #include "fix3/game_02_prefix.inc"
 #undef in_action
 
-/* Diagnostics and the stock packet input adapter depend only on the core
-   fighter/object types established above, so keep them at this known top-level
-   boundary rather than inside the later split match function. */
+/* Public stock-data exports, diagnostics and the stock packet input adapter
+   depend only on the core fighter/object types established above, so keep
+   them at this known top-level boundary rather than inside later split
+   functions. */
+#include "fix3/game_stock_exports.inc"
 #define stock_state_digest stock_base_state_digest
 #include "fix3/game_stock_diag.inc"
 #undef stock_state_digest

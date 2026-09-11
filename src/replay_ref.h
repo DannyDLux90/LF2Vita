@@ -2,6 +2,7 @@
 #define LF2_REPLAY_REF_H
 
 #include <stdint.h>
+#include "game.h"
 
 #define LF2_REF_PLAYER_COUNT 8
 #define LF2_REF_RNG_LEN 3000
@@ -18,6 +19,19 @@ typedef struct {
     int status;
     char name[12];
 } lf2_ref_player_t;
+
+typedef struct {
+    int player_index;
+    int player_team;
+    int cpu_count;
+    int cpu_indices[7];
+    int cpu_teams[7];
+    int actor_count;
+    int actor_fixture_slot[8];
+    uint8_t actor_control[8];
+    int stage_index;
+    int difficulty;
+} lf2_ref_match_plan_t;
 
 typedef struct {
     int mode;
@@ -39,10 +53,13 @@ void lf2_ref_replay_reset(lf2_ref_replay_t *r);
 int lf2_ref_replay_enable_rng(const lf2_ref_replay_t *r);
 int lf2_ref_replay_vita_difficulty(const lf2_ref_replay_t *r);
 int lf2_ref_replay_vita_background(const lf2_ref_replay_t *r);
+int lf2_ref_replay_build_match(const lf2_ref_replay_t *r, lf2_ref_match_plan_t *out);
+int lf2_ref_replay_compare_stats(const lf2_ref_replay_t *r, const lf2_ref_match_plan_t *plan,
+                                 const lf2_stock_stat_t *actual, int actual_count);
 /* Compatible with lf2_lockstep_frame_fn.  A recording stores the four local
    control slots only; the stock demos use slot 1 and leave slots 2..4 idle.
    One 4-byte sample is held for two 30-Hz game TUs, exactly like the original
    15-Hz network clock. */
-int lf2_ref_replay_clock(void *userdata, uint32_t local_held[4], uint32_t remote_held[4]);
+bool lf2_ref_replay_clock(void *userdata, uint32_t local_held[4], uint32_t remote_held[4]);
 
 #endif

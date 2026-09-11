@@ -1,0 +1,50 @@
+name: PC Compatibility Build
+
+on:
+  push:
+    branches:
+      - pc-compat-wip
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: vitasdk/vitasdk:2026.08-20260813
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          echo "VITASDK=$VITASDK"
+          arm-vita-eabi-gcc --version
+          cmake --version
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Build ELF, SELF and VPK
+        run: cmake --build build --parallel 2
+
+      - name: Verify outputs
+        run: |
+          test -s build/lf2vita
+          test -s build/eboot.bin
+          test -s build/lf2vita.vpk
+          cmake -E tar tf build/lf2vita.vpk >/dev/null
+
+      - name: Upload engineering build
+        uses: actions/upload-artifact@v4
+        with:
+          name: lf2vita-pc-compat-${{ github.sha }}
+          path: |
+            build/lf2vita
+            build/eboot.bin
+            build/lf2vita.vpk
+          if-no-files-found: error
+          retention-days: 7

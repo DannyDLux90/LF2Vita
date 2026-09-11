@@ -23,8 +23,9 @@
             }
             if (b->frame==110) dmg=(dmg+3)/4;
             if(dmg<1)dmg=1;
-            b->hp-=dmg; if(b->hp<0)b->hp=0;
+            int old=b->hp;b->hp-=dmg; if(b->hp<0)b->hp=0;
             if(b->hp==0)b->dead=true;
+            fighter_stat_damage(a,b,old);
             int status_applied=(!b->dead)?apply_elemental_status(b,effect,a->facing,it):0;
             if(!status_applied&&!apply_caught_hurt_frame(b,a->facing))apply_hit_reaction(b,a->facing,it);
             play_hit_sound(effect,it->fall?it->fall:20,dmg);

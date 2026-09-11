@@ -87,7 +87,7 @@ typedef struct {
     bool dead;
     bool hit_latched; /* legacy field; v0.69 uses arest/vrest instead */
     int arest_ticks;
-    int vrest_ticks[LF2_MAX_CPUS+1];
+    int vrest_ticks[LF2_MAX_ACTORS];
     int holding_slot;
     int caught_by;
     int thrown_by;
@@ -103,6 +103,9 @@ typedef struct {
     int sonata_damage_cooldown;
     int status_age;
     int mp_regen_tick;
+    /* Jan Angel regeneration: stock hit_Fa:4 applies a 100-tu heal status. */
+    int jan_heal_ticks;
+    int jan_heal_phase;
     /* v0.66 hard-coded LF2 type-0 mechanics that are not expressible by
        ordinary frame chaining alone. */
     int roster_idx;
@@ -197,8 +200,12 @@ typedef struct {
     float vx,vy,vz;
     uint32_t hit_mask; /* legacy field; v0.69 uses arest/vrest instead */
     int arest_ticks;
-    int vrest_ticks[LF2_MAX_CPUS+1];
+    int vrest_ticks[LF2_MAX_ACTORS];
     bool opoint_fired;
+    bool hitfa_fired;
+    int target_slot; /* remembered target for engine-coded chase hit_Fa values */
+    int type3_timer; /* hit_a lifetime timer for type-3 attacks */
+    int type3_timer_code;
     bool attached;
     bool pickup_item;
     bool recoverable_weapon;

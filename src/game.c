@@ -1,8 +1,11 @@
 /* LF2Vita v0.69 fix3 generated runtime split. */
 #include "fix3/game_01.inc"
 
+/* game_02.inc historically crosses a function boundary. Keep the original
+   generated fragment intact for reference, but compile it through two exact
+   slices so the stock wrappers are inserted at a real top-level C boundary. */
 #define in_action stock_base_in_action
-#include "fix3/game_02.inc"
+#include "fix3/game_02_prefix.inc"
 #undef in_action
 
 /* The hitlag layer owns the first-stage defend/update wrappers. Rename those
@@ -15,6 +18,7 @@
 #undef stock_try_defend_hit
 #include "fix3/game_stock_armor.inc"
 
+#include "fix3/game_02_suffix.inc"
 #include "fix3/game_03.inc"
 
 #define make_ai_input stock_base_make_ai_input

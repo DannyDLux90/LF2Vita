@@ -107,6 +107,8 @@ vita_create_vpk(lf2vita.vpk ${VITA_TITLEID} eboot.bin
   FILE "${CMAKE_SOURCE_DIR}/assets/check_bg.png" "assets/check_bg.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/manual_bg.png" "assets/manual_bg.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/portraits.png" "assets/portraits.png"
+  FILE "${CMAKE_SOURCE_DIR}/assets/net70_vita_button.png" "assets/net70_vita_button.png"
+  FILE "${CMAKE_SOURCE_DIR}/assets/net70_pc_button.png" "assets/net70_pc_button.png"
   ${LF2_OPTIONAL_MUSIC_ARGS}
   ${LF2_OPTIONAL_REF_ARGS}
   FILE "${CMAKE_SOURCE_DIR}/assets/stages/00_sp.png" "assets/stages/00_sp.png"

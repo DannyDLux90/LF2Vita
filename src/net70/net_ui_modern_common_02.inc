@@ -10,7 +10,7 @@ static int adhoc_create_game(bool cheat){
             if(sel==0)st.mode=(uint8_t)((st.mode+(d>0?1:4))%5);
             else if(sel==1){int v=st.max_players+d;if(v<2)v=8;if(v>8)v=2;st.max_players=v;}
             else if(sel==2){int v=st.stage+d;if(v<0)v=STAGE_COUNT-1;if(v>=STAGE_COUNT)v=0;st.stage=v;}
-            else{int max=cheat?LF2_DIFF_CRAZY:LF2_DIFF_DIFFICULT;int v=st.difficulty+d;if(v<0)v=max;if(v>max)v=0;st.difficulty=v;}
+            else{int max=cheat?LF2_DIFF_CRAZY:LF2_DIFF_DIFFICULT;int v=(int)st.difficulty+d;if(v<0)v=max;if(v>max)v=0;st.difficulty=v;}
             ui_join();
         }
         if(pr&(SCE_CTRL_CROSS|SCE_CTRL_SQUARE)){
@@ -59,11 +59,27 @@ static void net70_touch_poll(net70_touch_press_t *out,int *was_down){
     *was_down=down;
 }
 
-/* Network screens deliberately use the Vita's native PGF system font directly.
-   The rest of LF2Vita also has a PVF helper, but these screens need fewer,
-   substantially larger glyphs for the physical 5-inch Vita display. */
-static float net70_text_width(float scale,const char *text){if(scale<0.70f)scale=0.70f;return (g_font&&text)?(float)vita2d_pgf_text_width(g_font,scale,text):0.0f;}
-static void net70_text(float x,float baseline,float scale,unsigned color,const char *text){if(scale<0.70f)scale=0.70f;if(g_font&&text){vita2d_pgf_draw_text(g_font,(int)x+1,(int)baseline+1,RGBA8(0,0,0,215),scale,text);vita2d_pgf_draw_text(g_font,(int)x,(int)baseline,color,scale,text);}}
+/* Network screens now use the same readable PVF helper as the rest of LF2Vita
+   whenever it is available, with PGF as a safe fallback. */
+static vita2d_texture *g_net70_vita_button_tex,*g_net70_pc_button_tex;
+
+static vita2d_texture *net70_platform_texture(int platform){
+    vita2d_texture **slot=platform==1?&g_net70_pc_button_tex:&g_net70_vita_button_tex;
+    const char *path=platform==1?"app0:/assets/net70_pc_button.png":"app0:/assets/net70_vita_button.png";
+    if(!*slot)*slot=vita2d_load_PNG_file(path);
+    return *slot;
+}
+
+static float net70_text_width(float scale,const char *text){
+    if(scale<0.70f)scale=0.70f;
+    if(lf2_ui_font_ready())return lf2_ui_text_width(scale,text);
+    return (g_font&&text)?(float)vita2d_pgf_text_width(g_font,scale,text):0.0f;
+}
+static void net70_text(float x,float baseline,float scale,unsigned color,const char *text){
+    if(scale<0.70f)scale=0.70f;
+    if(lf2_ui_font_ready()&&text){lf2_ui_draw_text(x,baseline-24.0f*scale,scale,color,text);return;}
+    if(g_font&&text){vita2d_pgf_draw_text(g_font,(int)x+1,(int)baseline+1,RGBA8(0,0,0,215),scale,text);vita2d_pgf_draw_text(g_font,(int)x,(int)baseline,color,scale,text);}
+}
 static void net70_text_center(float x,float w,float baseline,float scale,unsigned color,const char *text){float tw=net70_text_width(scale,text);net70_text(x+(w-tw)*0.5f,baseline,scale,color,text);}
 
 static void net70_draw_outline(float x,float y,float w,float h,unsigned color){

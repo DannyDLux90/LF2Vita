@@ -67,7 +67,12 @@ static void apply_hits(object_world_t *world,fighter_t *fighters,int total,int a
         /* kind:1 is the normal walking grab and only catches a stunned
            state-16 victim. kind:3 is the explicit special grab (Louis). */
         if(it->kind==1&&catch_itr&&bf->state!=16)continue;
-        if(it->kind!=0&&it->kind!=4&&it->kind!=5&&it->kind!=6&&!sustained&&!catch_itr)continue;
+        /* kind 6 is passive: it marks a vulnerable/super-punch target region
+           and must never execute as an attack of its owning fighter. Treating
+           it as active causes state-16 frames (for example Firen 226/227) to
+           deal zero-damage repeat hits and bounce a falling victim forever
+           between state 12 and injury frames. */
+        if(it->kind!=0&&it->kind!=4&&it->kind!=5&&!sustained&&!catch_itr)continue;
         if(it->kind==4&&bidx==a->thrown_by)continue;
         /* Original LF2 repeat-hit control: arest blocks this attacker for a
            few TU, while vrest blocks only this attacker/victim pair. There is

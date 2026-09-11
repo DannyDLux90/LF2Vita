@@ -16,6 +16,7 @@ typedef struct {
     int x, y, w, h;
     int dvx, dvy;
     int fall, arest, vrest, bdefend, injury, effect, zwidth;
+    int catchingact, caughtact;
 } lf2_itr_def_t;
 
 typedef struct {
@@ -31,6 +32,32 @@ typedef struct {
     int oid;
     int facing;
 } lf2_opoint_def_t;
+
+/* LF2 weapon attachment point. Type-0 fighter frames and stock weapon frames
+   both carry one of these. Matching the two authored points is what keeps a
+   held item aligned while standing, walking, attacking and drinking. */
+typedef struct {
+    bool present;
+    int kind;
+    int x, y;
+    int weaponact;
+    int attacking;
+    int cover;
+    int dvx, dvy, dvz;
+} lf2_wpoint_def_t;
+
+
+typedef struct {
+    bool present;
+    int kind;
+    int x, y;
+    int injury;
+    int vaction, aaction, jaction, taction;
+    int tx, ty;
+    int throwvx, throwvy, throwvz;
+    int hurtable, throwinjury, decrease, dircontrol, cover;
+    int fronthurtact, backhurtact;
+} lf2_cpoint_def_t;
 
 typedef struct {
     bool present;
@@ -49,6 +76,8 @@ typedef struct {
     int bdy_count;
     lf2_opoint_def_t opoints[LF2_MAX_OPOINTS];
     int opoint_count;
+    lf2_wpoint_def_t wpoint;
+    lf2_cpoint_def_t cpoint;
 } lf2_frame_def_t;
 
 typedef struct {
@@ -68,11 +97,17 @@ typedef struct {
     float walking_speed, walking_speedz;
     float running_frame_rate;
     float running_speed, running_speedz;
+    float heavy_walking_speed, heavy_walking_speedz;
+    float heavy_running_speed, heavy_running_speedz;
     float jump_height, jump_distance, jump_distancez;
     float dash_height, dash_distance, dash_distancez;
     lf2_sheet_def_t sheets[LF2_MAX_SHEETS];
     int sheet_count;
     lf2_frame_def_t frames[LF2_MAX_FRAMES];
+    lf2_itr_def_t weapon_strength[4];
+    bool weapon_strength_present[4];
+    int weapon_hp, weapon_drop_hurt;
+    char weapon_hit_sound[96], weapon_drop_sound[96], weapon_broken_sound[96];
 } lf2_character_def_t;
 
 int lf2_load_character(const char *app0_root, const char *dat_rel_path, lf2_character_def_t *out);

@@ -3,18 +3,20 @@
 #include "log.h"
 
 #include <psp2/audioout.h>
+#include <psp2/io/fcntl.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/threadmgr.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 /*
  * LF2 2.00a ships effects at many unusual sample rates (10 kHz..44.1 kHz).
  * v0.40 stepped through those sources with nearest-neighbour resampling and
- * hard-clipped the sum of all voices. On Vita speakers that sounds gritty.
- * v0.50+ converts every effect once to 48 kHz with linear interpolation and
- * uses a headroom-aware mixer with a gentle limiter.
+ * hard-clipped the sum of all voices.  On Vita speakers that sounds very
+ * gritty.  v0.50 converts every effect once to 48 kHz with linear interpolation
+ * and uses a headroom-aware mixer with a gentle limiter.
  */
 #define AUDIO_RATE 48000
 #define AUDIO_FRAMES 1024
@@ -25,7 +27,7 @@
 
 typedef struct {
     char path[PATH_CAP];
-    int16_t *samples;
+    int16_t *samples;          /* mono, pre-resampled to AUDIO_RATE */
     uint32_t frames;
     uint32_t source_rate;
     uint64_t last_play_us;
@@ -46,11 +48,17 @@ static volatile int g_running;
 static int g_port=-1;
 static SceUID g_thread=-1;
 static uint32_t g_serial;
+static sound_t g_music;
+static uint32_t g_music_pos;
+static volatile int g_music_playing;
+static int g_music_loaded;
 
 static void lock_audio(void){ while(__sync_lock_test_and_set(&g_lock,1)) sceKernelDelayThread(50); }
 static void unlock_audio(void){ __sync_lock_release(&g_lock); }
+
 static uint16_t rd16(const unsigned char *p){ return (uint16_t)(p[0]|((uint16_t)p[1]<<8)); }
 static uint32_t rd32(const unsigned char *p){ return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24); }
+
 static int16_t clamp16(int32_t v){ return (int16_t)(v>32767?32767:(v<-32768?-32768:v)); }
 
 static int decode_wav(const unsigned char *buf,size_t size,sound_t *out){
@@ -84,6 +92,8 @@ static int decode_wav(const unsigned char *buf,size_t size,sound_t *out){
 
     if(src_frames==1){for(uint32_t i=0;i<dst_frames;i++)dst[i]=src[0];}
     else {
+        /* 32.32 fixed point linear interpolation.  This avoids the strong
+           imaging/aliasing audible in v0.40's nearest-neighbour path. */
         uint64_t step=((uint64_t)rate<<32)/AUDIO_RATE;
         uint64_t phase=0;
         for(uint32_t i=0;i<dst_frames;i++,phase+=step){
@@ -104,8 +114,30 @@ static sound_t *find_sound_mut(const char *path){
     return NULL;
 }
 
+
+static int read_file_all(const char *path,unsigned char **out,size_t *out_n){
+    if(!path||!out||!out_n)return -1;*out=NULL;*out_n=0;
+    SceUID fd=sceIoOpen(path,SCE_O_RDONLY,0);if(fd<0)return fd;
+    SceOff end=sceIoLseek(fd,0,SCE_SEEK_END);if(end<=0){sceIoClose(fd);return -2;}
+    sceIoLseek(fd,0,SCE_SEEK_SET);unsigned char *buf=(unsigned char*)malloc((size_t)end);if(!buf){sceIoClose(fd);return -3;}
+    size_t got=0;while(got<(size_t)end){int r=sceIoRead(fd,buf+got,(SceSize)((size_t)end-got));if(r<=0)break;got+=(size_t)r;}sceIoClose(fd);
+    if(got!=(size_t)end){free(buf);return -4;}*out=buf;*out_n=got;return 0;
+}
+
+static void load_menu_music(void){
+    memset(&g_music,0,sizeof(g_music));g_music_pos=0;g_music_playing=0;g_music_loaded=0;
+    unsigned char *raw=NULL;size_t n=0;int rc=read_file_all("app0:/assets/main_bgm.wav",&raw,&n);
+    if(rc<0){lf2_logf("WARN","menu music read failed rc=%d",rc);return;}
+    rc=decode_wav(raw,n,&g_music);free(raw);
+    if(rc<0){lf2_logf("WARN","menu music decode failed rc=%d",rc);return;}
+    snprintf(g_music.path,sizeof(g_music.path),"assets/main_bgm.wav");g_music_loaded=1;
+    lf2_logf("AUDIO","menu music ready frames=%u src_rate=%u",(unsigned)g_music.frames,(unsigned)g_music.source_rate);
+}
+
 static int choose_voice(void){
     for(int i=0;i<AUDIO_VOICES;i++)if(!g_voices[i].active)return i;
+    /* If all voices are busy, replace the one closest to its natural end.
+       Replacing slot 0 unconditionally (v0.40) caused audible discontinuities. */
     int best=0;uint32_t best_remaining=0xffffffffu;
     for(int i=0;i<AUDIO_VOICES;i++){
         const sound_t *s=g_voices[i].sound;
@@ -122,16 +154,30 @@ static int audio_thread(SceSize args,void *argp){
         lock_audio();
         for(int i=0;i<AUDIO_FRAMES;i++){
             int64_t acc=0;int active=0;
+            if(g_music_playing&&g_music_loaded&&g_music.samples&&g_music.frames){
+                if(g_music_pos>=g_music.frames)g_music_pos=0;
+                /* Original main.wma is background music. Keep it below combat/UI
+                   effects so menu feedback stays crisp on the Vita speakers. */
+                acc+=(int32_t)g_music.samples[g_music_pos++]*3/8;active++;
+            }
             for(int v=0;v<AUDIO_VOICES;v++)if(g_voices[v].active){
                 const sound_t *s=g_voices[v].sound;uint32_t p=g_voices[v].pos;
                 if(!s||p>=s->frames){g_voices[v].active=0;continue;}
                 int32_t sample=s->samples[p++];g_voices[v].pos=p;
+                /* Tiny end fade prevents a click when a source ends on a
+                   non-zero sample. Keep the attack transient intact. */
                 uint32_t remain=s->frames-p;
                 if(remain<48)sample=(int32_t)((int64_t)sample*(int64_t)remain/48);
                 acc+=sample;active++;
                 if(p>=s->frames)g_voices[v].active=0;
             }
-            if(active>1){int denom=1024+(active-1)*480;acc=acc*1024/denom;}
+            if(active>1){
+                /* Preserve a single effect at full level, but create increasing
+                   headroom as effects overlap. */
+                int denom=1024+(active-1)*480;
+                acc=acc*1024/denom;
+            }
+            /* Gentle knee instead of v0.40's brick-wall clipping. */
             int64_t a=acc<0?-acc:acc;
             if(a>28000){a=28000+(a-28000)/5;if(a>32767)a=32767;acc=acc<0?-a:a;}
             int16_t smp=(int16_t)acc;mix[i*2]=smp;mix[i*2+1]=smp;
@@ -144,7 +190,7 @@ static int audio_thread(SceSize args,void *argp){
 }
 
 int lf2_audio_init(void){
-    if(g_thread>=0)return 0;g_sound_count=0;g_lock=0;g_serial=0;memset(g_voices,0,sizeof(g_voices));
+    if(g_thread>=0)return 0;g_sound_count=0;g_lock=0;g_serial=0;memset(g_voices,0,sizeof(g_voices));load_menu_music();
     int total=lf2_pak_count();size_t pcm_bytes=0;
     for(int i=0;i<total&&g_sound_count<AUDIO_MAX_SOUNDS;i++){
         const char *name=lf2_pak_entry_name(i);size_t ln=name?strlen(name):0;
@@ -175,9 +221,20 @@ void lf2_audio_play(const char *relpath){
 
 int lf2_audio_ready(void){return g_port>=0&&g_thread>=0;}
 
+void lf2_audio_music_start(void){
+    if(!g_music_loaded)return;lock_audio();g_music_playing=1;unlock_audio();
+    lf2_logf("AUDIO","menu music start pos=%u",(unsigned)g_music_pos);
+}
+void lf2_audio_music_stop(void){
+    lock_audio();g_music_playing=0;g_music_pos=0;unlock_audio();
+    lf2_logf("AUDIO","menu music stop");
+}
+int lf2_audio_music_ready(void){return g_music_loaded;}
+
 void lf2_audio_shutdown(void){
     if(g_thread>=0){g_running=0;sceKernelWaitThreadEnd(g_thread,NULL,NULL);sceKernelDeleteThread(g_thread);g_thread=-1;}
     if(g_port>=0){sceAudioOutReleasePort(g_port);g_port=-1;}
     for(int i=0;i<g_sound_count;i++){free(g_sounds[i].samples);g_sounds[i].samples=NULL;}
+    free(g_music.samples);g_music.samples=NULL;g_music_loaded=0;g_music_playing=0;g_music_pos=0;
     lf2_logf("AUDIO","shutdown sounds=%d",g_sound_count);g_sound_count=0;
 }

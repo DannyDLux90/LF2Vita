@@ -11,6 +11,7 @@ typedef struct {
     float ratio;
     int boss;
     int soldier;
+    int x; /* authored distance from the current right-hand stage bound */
 } lf2_stage_spawn_t;
 
 typedef struct {
@@ -36,6 +37,12 @@ int lf2_stage_object_to_roster(int object_id);
    a 2x spawn approximation for CRAZY while preserving the authored order. */
 int lf2_stage_build_phase(const lf2_stage_phase_t *phase, int difficulty,
                           int *roster_out, int *hp_out, int cap,
+                          unsigned *rng_state);
+
+/* Extract authored pickup objects (100..199) from a stage phase. x_out stores
+   the original stage.dat x value; runtime places the pickup at bound-x. */
+int lf2_stage_build_items(const lf2_stage_phase_t *phase, int difficulty,
+                          int *oid_out, int *x_out, int cap,
                           unsigned *rng_state);
 
 #endif

@@ -1,26 +1,32 @@
-# Little Fighter 2 Vita v0.63
+# Little Fighter 2 Vita v0.69
 
 Native PS Vita work-in-progress port using Little Fighter 2 2.00a data supplied locally by the user.
 
-## v0.63 changes
+## v0.69 hardware-test focus
 
-- Adds native LF2 `opoint` spawning from the original character DAT files.
-- Renders and simulates stock arrows, balls, chase balls, wind/blast and flame/column objects from their own 2.00a DAT/BMP definitions.
-- Projectile `itr` damage now changes HP and applies authored knockback/effect values.
-- Henry's five-arrow command spawns five separately visible arrows.
-- Projectile spawning/hits are logged with `OBJECT` entries for hardware diagnosis.
-- 1-on-1 Championship now shows the round winner, defeated fighter and next opponent before the next round.
-- 2-on-2 Championship shows the winning team, defeated team and next team.
-- The stable v0.61 renderer/font and v0.50 audio path are otherwise intentionally unchanged.
+v0.69 is the first broad PC-fidelity combat pass after the v0.68 Stage/item hardware test. Item pickup remains on **L**. Held items now use the stock weapon strength table and throw frame groups, catch/throw uses parsed `cpoint` data, active repeat-hit control uses `arest`/per-target `vrest`, Stage slots can be reused as soon as HP reaches zero, and CPUs stop targeting a state-14 lying player and retreat when no other active target exists.
+
+- Original title/menu music now loops through the existing 48 kHz Vita mixer. The local build converts `bgm/main.wma` to PCM WAV ahead of time; no WMA decoder runs on the Vita.
+- Melee and projectile contact now trigger LF2-style impact sounds instead of relying only on attack-frame sounds.
+- Hit feedback includes a short fighter flash plus normal hit sparks and effect-specific blood, fire or ice particles.
+- The in-fight HUD is four columns by two rows, matching the original LF2 layout: small portrait, red HP bar and blue MP bar for up to eight active fighters.
+- `itr` knockback now uses `dvx`, `dvy` and accumulated `fall`: light hurt, heavier hurt, dance-of-pain and airborne/falling reactions are separated, with landing frames after a launch.
+- CPU fighters now choose valid, affordable DAT-defined special commands on Easy, Normal, Difficult and CRAZY rather than using only basic attacks on lower difficulties.
+- Main menu now contains `Network Play`, with separate Vita Ad-Hoc Host/Game Join and PC LF2 2.00a Host/Game Join targets. **This build does not open a network transport yet.**
+
+- Stage Mode now advances directly after a cleared wave, and enemy/item textures needed by later waves are preloaded before gameplay. Enemy slots reuse shared read-only fighter assets, eliminating synchronous DAT/texture uploads from the wave transition path. Authored milk/beer entries from `stage.dat` are preserved.
+- Stock pickups are active: stick, hoe, knife, baseball, milk, beer, boomerang, stone and wooden box. **L** picks up a nearby grounded item. Square remains attack/use; hold Square with milk/beer to drink. Light-weapon attack poses use the original fighter/weapon `wpoint` + `weaponact` pairing, and loose items play their authored landing sequence before resting.
+- Rudolf caught-target transform, Louis -> LouisEX and Firen + Freeze -> Firzen have native first-pass handling. Static special and item audits are included in the workspace.
 
 ## Vita controls
 
 - Left stick / D-pad: movement and menu navigation.
 - Strong analog-stick deflection: run.
-- □: attack / confirm in classic-style menus.
+- □: attack; use an already-held weapon; throw when the PC throw command applies; confirm in classic-style menus.
+- L: pick up a nearby grounded item.
+- Hold □ with milk/beer: drink until released or empty.
 - ×: jump / alternate confirm.
 - ○: defend / combo modifier / back.
-- L: alternate defend/combo modifier.
 - △ or R: primary special shortcut.
 - START: pause.
 - SELECT in the main menu: in-game guide.
@@ -33,12 +39,12 @@ Native PS Vita work-in-progress port using Little Fighter 2 2.00a data supplied 
 
 ## Diagnostics
 
-- `ux0:data/LF2V00001/lf2.log` (current launch only)
-- `ux0:data/LF2V00001/lf2_prev.log` (previous launch)
-- `ux0:data/LF2V00001/last_state.txt`
+- `ux0:data/LF2V00001/lf2.log` — current launch only.
+- `ux0:data/LF2V00001/lf2_prev.log` — previous launch.
+- `ux0:data/LF2V00001/last_state.txt` — last synchronous stage marker.
 
-Mode transitions are logged with `stage_mode`, `stage:phase`, `championship1`, `championship2`, `battle` and `demo` tags. Renderer/action diagnostics continue to use `RENDER` and `ANIM`.
+New 0.69 diagnostics include `HIT` reaction data, `AI ... skill frame=...`, title-music readiness/start/stop, plus the existing `OBJECT` projectile cache/spawn/hit records.
 
 ## Current limitations
 
-The combat engine is still being rebuilt from the original 2.00a data rather than executing the Windows binary. Stage weapons and consumables, captive criminals, boss/soldier reserve spawning, multi-human local input, complete background scrolling/layers, Rudolf clone/transform semantics and held-weapon attachment (such as Freeze ice sword) remain incomplete. The Vita runtime currently supports eight active fighters; large Stage waves are therefore streamed in batches. Playback Recording can browse the stock files but does not yet decode their deterministic input stream.
+The combat engine is still a native reimplementation rather than the Windows LF2 binary. v0.69 adds first-pass native catch/throw, weapon throwing and rest timing, but exact hitlag/defend-break/armor, dark-red recoverable HP, rare ITR/cpoint cases, CPU item strategy and per-weapon durability/drop rules still need fidelity work. The complete Stage reserve/conditional-directive set and full original `bg.dat` layer/parallax renderer remain incomplete. Rudolf/Louis/Firzen transformations still need hardware edge-case testing. Playback Recording lacks the deterministic `.lfr` event-stream decoder. Network Play remains a menu/protocol scaffold in 0.69; Vita Ad-Hoc discovery/transport and the exact original PC lockstep protocol are not implemented.

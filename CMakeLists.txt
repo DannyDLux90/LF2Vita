@@ -13,7 +13,7 @@ include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "Little Fighter 2 Vita")
 set(VITA_TITLEID "LF2V00001")
-set(VITA_VERSION "00.63")
+set(VITA_VERSION "00.69")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -53,6 +53,13 @@ vita_create_self(eboot.bin lf2vita UNSAFE)
 # game.lf2pak. This removes hundreds of VPK entries and dramatically reduces
 # VitaShell installation metadata overhead while still keeping the game data
 # directly inside the VPK.
+set(LF2_OPTIONAL_MUSIC_ARGS)
+if(EXISTS "${CMAKE_SOURCE_DIR}/assets/main_bgm.wav")
+  list(APPEND LF2_OPTIONAL_MUSIC_ARGS FILE "${CMAKE_SOURCE_DIR}/assets/main_bgm.wav" "assets/main_bgm.wav")
+else()
+  message(WARNING "assets/main_bgm.wav is missing; run tools/prepare_music.py with your LF2 2.00a archive to include the original title music")
+endif()
+
 vita_create_vpk(lf2vita.vpk ${VITA_TITLEID} eboot.bin
   VERSION ${VITA_VERSION}
   NAME ${VITA_APP_NAME}
@@ -75,6 +82,7 @@ vita_create_vpk(lf2vita.vpk ${VITA_TITLEID} eboot.bin
   FILE "${CMAKE_SOURCE_DIR}/assets/check_bg.png" "assets/check_bg.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/manual_bg.png" "assets/manual_bg.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/portraits.png" "assets/portraits.png"
+  ${LF2_OPTIONAL_MUSIC_ARGS}
   FILE "${CMAKE_SOURCE_DIR}/assets/stages/00_sp.png" "assets/stages/00_sp.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/stages/01_bc.png" "assets/stages/01_bc.png"
   FILE "${CMAKE_SOURCE_DIR}/assets/stages/02_cuhk.png" "assets/stages/02_cuhk.png"

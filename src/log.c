@@ -70,8 +70,8 @@ void lf2_log_init(void){
     sceIoRename(LOG_FILE,LOG_PREV_FILE);
     g_log=sceIoOpen(LOG_FILE,SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
     lf2_logf("INFO","============================================================");
-    lf2_logf("INFO","Little Fighter 2 Vita 0.63 session start");
-    lf2_logf("INFO","build=0.63 log_policy=current_session prev=%s",LOG_PREV_FILE);
+    lf2_logf("INFO","Little Fighter 2 Vita 0.69 session start");
+    lf2_logf("INFO","build=0.69 log_policy=current_session prev=%s",LOG_PREV_FILE);
     if(prev[0]&&strstr(prev,"unclean=1"))lf2_logf("WARN","Previous session did not finish cleanly: %s",prev);
     lf2_log_memory("startup");sync_log();
 }

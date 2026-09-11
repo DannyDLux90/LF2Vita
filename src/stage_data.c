@@ -51,13 +51,14 @@ int lf2_stage_load(int stage_id,lf2_stage_t *out){
         if(!strstr(line,"id:"))continue;
         if(phase->spawn_count>=LF2_STAGE_MAX_SPAWNS)continue;
         int id=line_int(line,"id:",-1);
-        /* stage.dat also lists milk/beer and criminal containers. Store only
-           entries that can become actual fighters in the native engine. */
-        if(lf2_stage_object_to_roster(id)<0 && id!=1000 && id!=3000)continue;
+        /* Keep both fighters and stock pickup objects. v0.65 discarded the
+           100..199 range, which is why authored milk/beer never appeared. */
+        if(lf2_stage_object_to_roster(id)<0 && id!=1000 && id!=3000 && !(id>=100&&id<=199))continue;
         lf2_stage_spawn_t *sp=&phase->spawns[phase->spawn_count++];
         memset(sp,0,sizeof(*sp));sp->object_id=id;sp->hp=line_int(line,"hp:",500);
         sp->times=line_int(line,"times:",1);if(sp->times<1)sp->times=1;
         sp->ratio=line_float(line,"ratio:",-1.0f);sp->boss=strstr(line,"<boss>")!=NULL;sp->soldier=strstr(line,"<soldier>")!=NULL;
+        sp->x=line_int(line,"x:",100);
     }
     free(text);
     if(!in_stage && out->phase_count==0)return -3;
@@ -82,6 +83,16 @@ static unsigned next_rand(unsigned *state){
     unsigned x=*state;if(!x)x=0x6d2b79f5u;x^=x<<13;x^=x>>17;x^=x<<5;*state=x;return x;
 }
 
+static int stage_spawn_copies(const lf2_stage_spawn_t *sp,int difficulty){
+    int copies;
+    if(sp->ratio>=0.0f){
+        float scaled=sp->ratio*(difficulty==LF2_DIFF_CRAZY?2.0f:1.0f);
+        copies=(int)scaled;
+    }else copies=sp->times;
+    if(difficulty==LF2_DIFF_CRAZY && sp->ratio<0.0f)copies*=2;
+    return copies<0?0:copies;
+}
+
 int lf2_stage_build_phase(const lf2_stage_phase_t *phase,int difficulty,
                           int *roster_out,int *hp_out,int cap,unsigned *rng_state){
     if(!phase||!roster_out||!hp_out||cap<=0||!rng_state)return 0;
@@ -92,13 +103,8 @@ int lf2_stage_build_phase(const lf2_stage_phase_t *phase,int difficulty,
            part of ratio on E/N/D (e.g. .7 and .3 do not add enemies). Lines
            without ratio use their authored `times` count. CRAZY roughly doubles
            both the unconditional and ratio-derived population. */
-        int copies;
-        if(sp->ratio>=0.0f){
-            float scaled=sp->ratio*(difficulty==LF2_DIFF_CRAZY?2.0f:1.0f);
-            copies=(int)scaled;
-        } else copies=sp->times;
-        if(difficulty==LF2_DIFF_CRAZY && sp->ratio<0.0f)copies*=2;
-        if(copies<0)copies=0;
+        if(sp->object_id>=100&&sp->object_id<=199)continue;
+        int copies=stage_spawn_copies(sp,difficulty);
         for(int k=0;k<copies&&n<cap;k++){
             int roster;
             if(sp->object_id==3000)roster=10+(int)(next_rand(rng_state)&1u); /* Bandit/Hunter */
@@ -110,6 +116,24 @@ int lf2_stage_build_phase(const lf2_stage_phase_t *phase,int difficulty,
             else if(difficulty==LF2_DIFF_CRAZY)hp=(hp*3+1)/2;
             if(hp<1)hp=1;
             roster_out[n]=roster;hp_out[n]=hp;n++;
+        }
+    }
+    return n;
+}
+
+int lf2_stage_build_items(const lf2_stage_phase_t *phase,int difficulty,
+                          int *oid_out,int *x_out,int cap,unsigned *rng_state){
+    (void)rng_state;
+    if(!phase||!oid_out||!x_out||cap<=0)return 0;
+    int n=0;
+    for(int i=0;i<phase->spawn_count&&n<cap;i++){
+        const lf2_stage_spawn_t *sp=&phase->spawns[i];
+        if(sp->object_id<100||sp->object_id>199)continue;
+        int copies=stage_spawn_copies(sp,difficulty);
+        for(int k=0;k<copies&&n<cap;k++){
+            oid_out[n]=sp->object_id;
+            x_out[n]=sp->x + k*34;
+            n++;
         }
     }
     return n;

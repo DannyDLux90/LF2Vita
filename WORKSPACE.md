@@ -1,34 +1,27 @@
 # LF2Vita development workspace
 
-This repository tracks the current source/build workspace for the PS Vita port.
+This repository tracks the current source/build workspace for the PS Vita port. Hardware-test version: **0.69**.
 
 ## Directory layout
 
-- `src/` — native Vita runtime, renderer, DAT parser, audio mixer and diagnostics.
-- `tools/` — helpers that build the indexed `game.lf2pak` from a locally owned LF2 2.00a archive/directory.
+- `src/` — Vita runtime, renderer, DAT/stage parsers, fighter/object/projectile/item world, transformations, combat physics, AI, audio and diagnostics.
+- `tools/` — helpers to build `game.lf2pak`, prepare the original title music, and run static special/item coverage audits against a locally owned LF2 2.00a copy.
 - `gamepack/` — local generated game pack; `game.lf2pak` is intentionally ignored.
-- `sce_sys/` — LiveArea/manual layout. Binary artwork used by the packaged test build is kept in the downloadable workspace snapshot rather than redistributed from the original game in this public repository.
-- `assets/` — packaged Vita UI/stage artwork in the local test workspace. See `assets/README.md`.
+- `assets/` — Vita UI/stage artwork in the local hardware-test snapshot. `main_bgm.wav` is locally generated and ignored.
+- `sce_sys/` — LiveArea and native Vita manual resources.
 
-## Reproducing the test workspace
-
-1. Install VitaSDK plus libvita2d, libpng, libjpeg-turbo, freetype and zlib.
-2. Put a legally obtained LF2 2.00a archive somewhere outside the repository.
-3. Generate the pack:
-
-```sh
-python3 tools/make_gamepak.py /path/to/LittleFighter.zip gamepack/game.lf2pak
-```
-
-4. Supply the Vita artwork described in `assets/README.md` / `sce_sys/README.md` or copy it from a matching downloadable workspace snapshot.
-5. Build:
+## Reproducing a local test workspace
 
 ```sh
 export VITASDK=/path/to/vitasdk
+python3 tools/make_gamepak.py /path/to/LittleFighter.zip gamepack/game.lf2pak
+python3 tools/prepare_music.py /path/to/LittleFighter.zip assets/main_bgm.wav
 cmake -S . -B build
 cmake --build build -j
 ```
 
-## Versioning policy
+Supply the non-redistributable Vita artwork described by the asset README(s), or copy it from the matching private/local workspace snapshot.
 
-Starting with v0.60, the current source and build-workspace text files are published here whenever a new hardware-test VPK is produced. Original LF2 game data is not committed; the local `game.lf2pak` remains reproducible with the included tool.
+## Publication policy
+
+Every hardware-test increment is synchronized to the public GitHub repository with its current **source and reproducible workspace text/tooling**. Original LF2 2.00a data, converted title music, and copyrighted game artwork are not committed publicly. The downloadable local workspace snapshot can contain the user's supplied/generated resources for hardware testing.

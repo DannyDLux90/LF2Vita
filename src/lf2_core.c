@@ -15,11 +15,14 @@ static uint32_t distance_xz(const lf2_object_t *a, const lf2_object_t *b) {
 void lf2_world_init(lf2_world_t *world, uint32_t seed) {
     if (!world) return;
     memset(world, 0, sizeof(*world));
-    world->rng_state = seed ? seed : 0x4C463256u;
+    world->rng_state = seed ? seed : 0x4C463256u; /* "LF2V" */
 }
 
 uint32_t lf2_random(lf2_world_t *world, uint32_t range) {
     if (!world || range == 0) return 0;
+
+    /* Owned deterministic state replaces the Windows executable's fixed
+       memory-address RNG tables. xorshift32 is compact and Vita-friendly. */
     uint32_t x = world->rng_state;
     x ^= x << 13;
     x ^= x >> 17;

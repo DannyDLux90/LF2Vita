@@ -2,46 +2,45 @@
 
 Native PS Vita reimplementation of **Little Fighter 2 2.00a**, built with VitaSDK and libvita2d.
 
-> This repository contains the port source code, Vita workspace and build tooling. Original Little Fighter 2 game data is **not redistributed in Git**. Provide your own `LittleFighter.zip` and generate `gamepack/game.lf2pak` locally.
+> The public repository contains the port source code and reproducible workspace tooling. Original Little Fighter 2 game data, music and derived game artwork are not redistributed in Git. Supply your own LF2 2.00a files to make the local game pack and title BGM.
 
-Current development version: **0.63**.
+Current hardware-test version: **0.69**.
 
-## What works
+## Current state
 
-- Vita LiveArea start and LF2.NET cheat launch option
-- integrated verification of the packed 2.00a files
-- original encrypted DAT decoding/parsing and native vita2d sprite renderer
-- high-contrast bitmap UI font and corrected 30 Hz LF2 animation timing
-- native 48 kHz sound mixer
-- VS Mode with original-style eight-slot setup, teams, backgrounds and difficulty
-- **Stage Mode** driven by the stock `data/stage.dat`, including Stage 1-5, Survival, authored enemy order/HP and difficulty scaling
-- **1 on 1 Championship** with a 16-fighter elimination bracket
-- **2 on 2 Championship** with an 8-team elimination bracket and AI partner
-- **Battle Mode** with two configurable armies (hero, follower type/count, background, difficulty)
-- **Demo Mode** with random 4-vs-4 CPU teams and no human player
-- Playback Recording file browser for the bundled 2.00a `.lfr` demos; deterministic replay decoding is the remaining part of this mode
-- native Vita manual under `sce_sys/manual`
-- detailed diagnostics in `ux0:data/LF2V00001/lf2.log`
+- Vita LiveArea start plus LF2.NET/CRAZY launch option and native Vita manual.
+- Packed/CRC checked 2.00a game data with fast VitaShell installation layout.
+- Native DAT parser, 30 Hz gameplay simulation and vita2d renderer.
+- VS, Stage, 1-on-1 Championship, 2-on-2 Championship, Battle and Demo mode foundations.
+- Native projectile/opoint runtime for stock 2.00a arrows, balls and other attack objects, including recursive child opoints.
+- 48 kHz effect mixer plus looping original title/menu music prepared from the user's `bgm/main.wma`.
+- Contact hit sounds, hit flashes and effect-dependent blood/fire/ice feedback.
+- LF2-style eight-slot in-fight status board using the original small character portraits.
+- Hit `dvx`/`dvy` and `fall` reactions now drive knockback, launch/falling and landing states.
+- CPU fighters can choose and execute their own DAT-defined specials at all difficulties.
+- `Network Play` is present as a **protocol/UX scaffold only**. Vita Ad-Hoc and PC 2.00a interoperability are not enabled yet.
+- Stock pickup runtime for stick, hoe, knife, baseball, milk, beer, boomerang, stone and wooden box; VS/Battle drops and Stage Mode-authored consumables are supported.
+- Rudolf caught-target transformation, Louis→LouisEX and Firen+Freeze→Firzen have first-pass native state handling.
+- Detailed current-session log in `ux0:data/LF2V00001/lf2.log`.
 
-## v0.63 - projectile specials and Championship results
-
-v0.63 adds the missing native **opoint/object layer** used by LF2 special attacks. The 2.00a character DAT parser now reads `opoint:` blocks (`oid`, `action`, launch velocity, position and facing/count). Stock projectile/light-weapon data such as Henry's arrows, Deep/John/Firen/Freeze/Dennis/Woody/Davis energy attacks and blast/wind objects are loaded from the original DAT/BMP resources, animated at the 30 Hz LF2 simulation rate, rendered in stage depth and collide through their own `itr` regions. `injury`, knockback and fire/freeze effect flags are applied to fighters. Henry's `facing: 50` five-arrow shot creates five visible arrows.
-
-The 1-on-1 and 2-on-2 Championship flows now pause after every played round on a dedicated result screen. It shows the winner/defeated fighter or team and, after the other bracket matches are resolved, the next opponent/team before continuing. The bracket screen remains visible before each round.
-
-The object runtime deliberately remains bounded to 64 active spawned objects and only caches stock 2.00a attack object definitions used by the current match. Character-clone/transformation semantics and held-weapon attachment (`opoint kind: 2`, e.g. Freeze's ice sword) still require separate engine work; they are logged instead of being faked.
+See [VERSION_0.69.md](VERSION_0.69.md) for the latest changes and [NETWORK.md](NETWORK.md) for the networking plan/status.
 
 ## Build
 
-Requirements: VitaSDK, libvita2d, libpng, libjpeg-turbo, freetype and zlib.
+Requirements: VitaSDK, libvita2d, libpng, libjpeg-turbo, freetype, zlib, Python 3; `ffmpeg` is needed only to prepare the original menu music.
 
 ```sh
 export VITASDK=/path/to/vitasdk
 python3 tools/make_gamepak.py /path/to/LittleFighter.zip gamepack/game.lf2pak
+python3 tools/prepare_music.py /path/to/LittleFighter.zip assets/main_bgm.wav
 cmake -S . -B build
 cmake --build build -j
 ```
 
-The local game pack contains the user's legally obtained 2.00a files and is intentionally ignored by Git.
+`gamepack/game.lf2pak` and `assets/main_bgm.wav` are local generated inputs and intentionally ignored by Git. The executable still builds without the music file, but title/menu music will then be disabled at runtime.
 
-See [README_VITA.md](README_VITA.md) for Vita-specific controls, limitations and diagnostics.
+See [README_VITA.md](README_VITA.md) for controls, diagnostics and remaining engine gaps.
+
+## 0.69 PC-fidelity combat pass
+
+v0.69 adds PC-style weapon throw frame/release behavior, parsed `weapon_strength_list`, LF2-style `arest`/per-target `vrest`, first-pass `cpoint` catch/throw and thrown-body ITR kind 4, heavy-weapon movement, immediate dead Stage-slot reuse, and CPU retreat from a state-14 lying opponent. See `VERSION_0.69.md` and `PC_FIDELITY_AUDIT.md`.

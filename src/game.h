@@ -38,6 +38,8 @@ typedef struct {
     bool allow_cancel;
     /* Optional small status string shown in the HUD, e.g. Stage 2-3 / Phase 4. */
     const char *hud_label;
+    /* Stage Mode has no round-over splash between authored waves. */
+    bool suppress_result_overlay;
     /* Initial state. <=0 selects the regular 500 default. */
     int player_hp;
     int player_max_hp;
@@ -62,4 +64,36 @@ int lf2_run_match(vita2d_pgf *font, vita2d_texture *stage_bg,
                   int player_index, int player_team,
                   const int *cpu_indices, const int *cpu_teams, int cpu_count,
                   int difficulty, bool cheat_enabled);
+
+/* A Stage Mode section is one continuously scrolling world. Each authored
+   stage.dat phase extends the right-hand bound and supplies a queue of enemy
+   fighters. Up to seven are active at once; additional enemies enter through
+   freed slots without tearing down the player/background/GXM scene. */
+#define LF2_STAGE_RUNTIME_MAX_PHASES 128
+#define LF2_STAGE_RUNTIME_MAX_ENEMIES 64
+#define LF2_STAGE_RUNTIME_MAX_ITEMS 24
+
+typedef struct {
+    int bound;
+    int enemy_count;
+    int enemies[LF2_STAGE_RUNTIME_MAX_ENEMIES];
+    int hp[LF2_STAGE_RUNTIME_MAX_ENEMIES];
+    int item_count;
+    int item_oid[LF2_STAGE_RUNTIME_MAX_ITEMS];
+    int item_x[LF2_STAGE_RUNTIME_MAX_ITEMS];
+} lf2_stage_runtime_phase_t;
+
+typedef struct {
+    int phase_count;
+    lf2_stage_runtime_phase_t phases[LF2_STAGE_RUNTIME_MAX_PHASES];
+    int player_hp;
+    int player_mp;
+    int *player_hp_out;
+    int *player_mp_out;
+    const char *hud_prefix;
+} lf2_stage_runtime_t;
+
+int lf2_run_stage_section(vita2d_pgf *font, vita2d_texture *stage_bg,
+                          int player_index, int difficulty, bool cheat_enabled,
+                          const lf2_stage_runtime_t *stage);
 #endif

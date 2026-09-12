@@ -83,7 +83,12 @@
 #include "fix3/game_19.inc"
 #undef handle_form_input
 
+/* The generated game_20 split is intentionally included verbatim.  Keep this
+   compatibility alias local to the include so an accidental shortened token
+   in that fragment cannot leak into later runtime pieces. */
+#define remote_pre remote_prev
 #include "fix3/game_20.inc"
+#undef remote_pre
 #include "fix3/game_21.inc"
 #include "fix3/game_22.inc"
 #include "fix3/game_23.inc"

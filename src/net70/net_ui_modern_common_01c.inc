@@ -1,3 +1,12 @@
+static int net70_active_pair_chars(const lf2_adhoc_lobby_t *l,int *host_char,int *guest_char,int *guest_slot){
+    if(!l||!l->connected||!l->players[0].present)return -1;
+    int guest=-1;for(int i=1;i<LF2_ADHOC_MAX_PLAYERS;i++)if(l->players[i].present){guest=i;break;}
+    if(guest<1)return -2;
+    int hc=l->players[0].character,gc=l->players[guest].character;
+    if(hc<0||hc>=lf2_roster_count||gc<0||gc>=lf2_roster_count)return -3;
+    if(host_char)*host_char=hc;if(guest_char)*guest_char=gc;if(guest_slot)*guest_slot=guest;return 0;
+}
+
 static int net70_build_network_stage(lf2_stage_runtime_t *rt,int major,int host_char,int guest_char,int difficulty,uint32_t seed,int host_hp,int host_mp,int guest_hp,int guest_mp,int *host_hp_out,int *host_mp_out,int *guest_hp_out,int *guest_mp_out){
     if(!rt||major<0||major>=5)return -1;(void)host_char;memset(rt,0,sizeof(*rt));
     rt->player_hp=host_hp;rt->player_mp=host_mp;rt->player_hp_out=host_hp_out;rt->player_mp_out=host_mp_out;
@@ -35,13 +44,13 @@ static int net70_run_adhoc_stage(uint32_t match_id,int host_char,int guest_char,
 
 static int net70_run_adhoc_mode(uint32_t match_id){
     const lf2_adhoc_lobby_t *l=lf2_adhoc_lobby();int host_char=0,guest_char=0,guest_slot=0;
-    int pc=net70_two_player_chars(l,&host_char,&guest_char,&guest_slot);if(pc<0)return pc;
+    int pc=net70_active_pair_chars(l,&host_char,&guest_char,&guest_slot);if(pc<0)return pc;
     int host_partner=l->players[0].partner_character,guest_partner=l->players[guest_slot].partner_character;
     int host_follower=l->players[0].battle_follower,host_count=l->players[0].battle_count,guest_follower=l->players[guest_slot].battle_follower,guest_count=l->players[guest_slot].battle_count;
     int mode=l->settings.mode;int stage=(l->settings.stage<STAGE_COUNT)?l->settings.stage:0;int difficulty=l->settings.difficulty;
     if(difficulty<LF2_DIFF_EASY||difficulty>LF2_DIFF_CRAZY)difficulty=LF2_DIFF_NORMAL;bool net_cheat=l->settings.allow_cheat!=0;
-    lf2_log_stage("network:adhoc_match_launch","id=%u role=%s mode=%s host_char=%s client_char=%s host_partner=%d client_partner=%d stage=%d diff=%s cheat=%d",
-                  (unsigned)match_id,l->host?"host":"client",lf2_net_mode_name(mode),lf2_roster[host_char].name,lf2_roster[guest_char].name,host_partner,guest_partner,stage,ui_diff_name(difficulty),net_cheat?1:0);
+    lf2_log_stage("network:adhoc_match_launch","id=%u role=%s mode=%s active_guest_slot=%d host_char=%s client_char=%s host_partner=%d client_partner=%d stage=%d diff=%s cheat=%d",
+                  (unsigned)match_id,l->host?"host":"client",lf2_net_mode_name(mode),guest_slot,lf2_roster[host_char].name,lf2_roster[guest_char].name,host_partner,guest_partner,stage,ui_diff_name(difficulty),net_cheat?1:0);
     int rc;if(mode==LF2_NET_MODE_STAGE)rc=net70_run_adhoc_stage(match_id,host_char,guest_char,stage%5,difficulty,net_cheat);else if(mode==LF2_NET_MODE_1V1)rc=net70_run_adhoc_championship_1v1(match_id,host_char,guest_char,stage,difficulty,net_cheat);else if(mode==LF2_NET_MODE_2V2)rc=net70_run_adhoc_championship_2v2(match_id,host_char,guest_char,host_partner,guest_partner,stage,difficulty,net_cheat);else rc=net70_run_adhoc_arena_match(match_id,mode,host_char,guest_char,host_partner,guest_partner,host_follower,host_count,guest_follower,guest_count,stage,difficulty,net_cheat);
     lf2_log_stage("network:adhoc_match_return","id=%u role=%s mode=%s rc=%d",(unsigned)match_id,l->host?"host":"client",lf2_net_mode_name(mode),rc);return rc;
 }

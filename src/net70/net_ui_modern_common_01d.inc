@@ -48,8 +48,11 @@ static int adhoc_lobby_screen(bool cheat){
                     lf2_adhoc_lobby_host_status(LF2_NET_STATUS_STARTING);
                     l=lf2_adhoc_lobby();uint32_t match_id=l->revision;last_started_revision=match_id;ui_ok();
                     int mrc=net70_run_adhoc_mode(match_id);
-                    lf2_adhoc_lobby_host_status(LF2_NET_STATUS_WAITING);
-                    lf2_adhoc_lobby_set_ready(false);
+                    /* Return to WAITING and clear every player's Ready bit in
+                       one authoritative host snapshot. Clearing only slot 0
+                       left the guest stale-ready after a completed match. */
+                    lf2_net_settings_t post=lf2_adhoc_lobby()->settings;post.status=LF2_NET_STATUS_WAITING;
+                    lf2_adhoc_lobby_host_settings(&post);
                     if(mrc<0){char e[128];snprintf(e,sizeof(e),"Netzwerkspiel wurde getrennt oder konnte nicht starten (Fehler %d).",mrc);wait_message("AdHoc-Spiel",e);}
                     prev=sync_buttons();
                 }else ui_cancel();

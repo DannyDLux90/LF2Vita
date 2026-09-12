@@ -124,7 +124,11 @@ typedef struct {
     int grabbed_ticks;
     int ice_sword_ticks;
     int held_oid;
+    /* Bottle contents and weapon HP are separate in stock LF2. held_units is
+       only the remaining Milk/Beer drink time; held_weapon_hp survives
+       pickup/throw cycles and is reduced when the loose weapon itself is hit. */
     int held_units;
+    int held_weapon_hp;
     bool drinking;
     int drink_tick;
     unsigned frame_serial;

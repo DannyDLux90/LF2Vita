@@ -1,4 +1,4 @@
-    if(empty){f->held_oid=0;f->held_units=0;lf2_audio_play("data/040.wav");lf2_logf("ITEM","%s finished %s",f->def.name,item_name(oid));}
+    if(empty){f->held_oid=0;f->held_units=0;f->held_weapon_hp=0;lf2_audio_play("data/040.wav");lf2_logf("ITEM","%s finished %s",f->def.name,item_name(oid));}
     if(f->def.frames[0].present)set_frame(f,0);
 }
 

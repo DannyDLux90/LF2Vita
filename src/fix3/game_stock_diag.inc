@@ -45,6 +45,7 @@ static uint32_t stock_state_digest(const fighter_t *fighters,int total,const obj
         h=stock_digest_u32(h,(uint32_t)f->sonata_ticks);
         h=stock_digest_u32(h,(uint32_t)f->held_oid);
         h=stock_digest_u32(h,(uint32_t)f->held_units);
+        h=stock_digest_u32(h,(uint32_t)f->held_weapon_hp);
         h=stock_digest_u32(h,f->drinking?1u:0u);
     }
     if(world){
@@ -73,6 +74,7 @@ static uint32_t stock_state_digest(const fighter_t *fighters,int total,const obj
             h=stock_digest_u32(h,o->recoverable_weapon?1u:0u);
             h=stock_digest_u32(h,o->grounded?1u:0u);
             h=stock_digest_u32(h,(uint32_t)o->durability);
+            h=stock_digest_u32(h,(uint32_t)o->weapon_hp);
         }
     }
     return h;

@@ -95,6 +95,57 @@ static void object_apply_hits(object_world_t *w,world_object_t *o,fighter_t *fig
         }
     }
 }
+/* Stock weapon victims are real objects with bdy regions. Heavy weapons on
+   the ground can be punched; light/throw/drink objects on the ground are only
+   attackable by another held weapon. Airborne loose weapons may be intercepted. */
+static int item_accepts_attack(const world_object_t *target,const lf2_itr_def_t *it,int attacker_is_held_weapon){
+    if(!target||!target->active||!target->cache||!it||target->attached||(!target->pickup_item&&!target->recoverable_weapon))return 0;
+    lf2_frame_def_t *tf=object_frame_def((world_object_t*)target);if(!tf||tf->bdy_count<=0)return 0;
+    if(target->type==2){
+        if(target->grounded||tf->state==2004)return 1;
+        return tf->state==2000&&it->fall>=60;
+    }
+    if(target->grounded)return attacker_is_held_weapon;
+    return 1;
+}
+
+static int item_itr_overlaps(world_object_t *target,const lf2_itr_def_t *it,int ax,int ay,float attacker_z){
+    if(!target||!it)return 0;lf2_frame_def_t *tf=object_frame_def(target);if(!tf)return 0;
+    int zw=it->zwidth?it->zwidth:14;if(fabsf(attacker_z-target->z)>=zw)return 0;
+    for(int bi=0;bi<tf->bdy_count;bi++){
+        lf2_bdy_def_t *bd=&tf->bdys[bi];int bx,by;object_region_world(target,bd->x,bd->y,bd->w,bd->h,&bx,&by);
+        if(rect_overlap_i(ax,ay,it->w,it->h,bx,by,bd->w,bd->h))return 1;
+    }
+    return 0;
+}
+
+static void item_react_to_hit(world_object_t *target,const lf2_itr_def_t *it,int facing){
+    if(!target||!target->active||!it)return;
+    if(target->type==2&&target->grounded){
+        if(it->fall>=60){target->grounded=false;target->pickup_item=false;target->recoverable_weapon=true;target->vx=(float)(facing?-3.0f:3.0f);target->vy=-3.7f;target->vz=0.0f;object_set_frame(target,0);}
+        else if(it->fall>=30){target->grounded=false;target->pickup_item=false;target->recoverable_weapon=true;target->vy=-2.0f;object_set_frame(target,0);}
+    }else if(!target->grounded){
+        target->vx*=-0.4f;target->vy*=-2.0f;target->vz*=-0.4f;
+    }
+}
+
+static void object_apply_hits_to_items(object_world_t *w,world_object_t *attacker){
+    if(!w||!attacker||!attacker->active||attacker->attached||attacker->pickup_item||attacker->arest_ticks>0)return;
+    lf2_frame_def_t *af=object_frame_def(attacker);if(!af||af->itr_count<=0)return;
+    for(int ii=0;ii<af->itr_count;ii++){
+        lf2_itr_def_t *it=&af->itrs[ii];if(it->kind!=0&&it->kind!=5&&it->kind!=9)continue;
+        int ax,ay;object_region_world(attacker,it->x,it->y,it->w,it->h,&ax,&ay);
+        for(int oi=0;oi<LF2_MAX_ACTIVE_OBJECTS;oi++){
+            world_object_t *target=&w->objects[oi];if(target==attacker||!item_accepts_attack(target,it,0))continue;
+            if(!item_itr_overlaps(target,it,ax,ay,attacker->z))continue;
+            if(item_damage_object(target,it->injury,it->bdefend,"object attack"))return;
+            item_react_to_hit(target,it,attacker->facing);
+            if(it->arest>0)attacker->arest_ticks=it->arest;
+            return;
+        }
+    }
+}
+
 static void world_clear_active(object_world_t *w){if(!w)return;memset(w->objects,0,sizeof(w->objects));memset(w->fx,0,sizeof(w->fx));}
 static void world_shutdown(object_world_t *w){if(!w)return;vita2d_wait_rendering_done();for(int i=0;i<w->cache_count;i++)if(w->cache[i].used)lf2_free_character_textures(&w->cache[i].def);memset(w,0,sizeof(*w));}
 

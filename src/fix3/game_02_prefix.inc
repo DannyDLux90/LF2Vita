@@ -52,7 +52,10 @@ typedef struct {
     bool pickup_item;
     bool recoverable_weapon;
     bool grounded;
+    /* durability is retained for bottle contents; weapon_hp is the authored
+       non-healable weapon life from the DAT bmp header. */
     int durability;
+    int weapon_hp;
     float attach_dx,attach_dy,attach_dz;
     object_cache_entry_t *cache;
 } world_object_t;

@@ -1,4 +1,4 @@
-    f->held_oid=0;f->held_units=0;f->drinking=false;f->drink_tick=0;
+    f->held_oid=0;f->held_units=0;f->held_weapon_hp=0;f->drinking=false;f->drink_tick=0;
     lf2_logf("ITEM","%s threw oid=%d name=%s fighter_frame=%d object_frame=%d vel=%.1f,%.1f,%.1f",
              f->def.name,oid,item_name(oid),f->frame,o->frame,o->vx,o->vy,o->vz);
     return 1;
@@ -69,12 +69,13 @@ static int fighter_handle_item_input(object_world_t *w,fighter_t *f,input_t *in)
     if(!in->pickup || in_action(f) || f->falling || f->y<0.0f)return 0;
     world_object_t *o=nearest_loose_item(w,f);if(!o)return 0;
     f->held_oid=o->oid;
-    f->held_units=o->durability>0?o->durability:(item_is_bottle(o->oid)?item_units_for_oid(o->oid):(o->cache&&o->cache->def.weapon_hp>0?o->cache->def.weapon_hp:item_units_for_oid(o->oid)));
+    f->held_units=item_is_bottle(o->oid)?(o->durability>0?o->durability:item_units_for_oid(o->oid)):0;
+    f->held_weapon_hp=o->weapon_hp>0?o->weapon_hp:item_initial_weapon_hp(o->cache);
     f->drinking=false;f->drink_tick=0;
     o->active=false;
     int pick_frame=item_is_heavy(f->held_oid)?116:115;if(pick_frame<LF2_MAX_FRAMES&&f->def.frames[pick_frame].present)set_frame(f,pick_frame);
     lf2_audio_play("data/009.wav");
-    lf2_logf("ITEM","%s picked oid=%d name=%s units=%d",f->def.name,f->held_oid,item_name(f->held_oid),f->held_units);
+    lf2_logf("ITEM","%s picked oid=%d name=%s units=%d weapon_hp=%d",f->def.name,f->held_oid,item_name(f->held_oid),f->held_units,f->held_weapon_hp);
     return 1;
 }
 

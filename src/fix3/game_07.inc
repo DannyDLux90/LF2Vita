@@ -66,15 +66,57 @@ static int object_landing_frame(const object_cache_entry_t *c){
     return object_ground_frame(c);
 }
 
+static int item_initial_weapon_hp(const object_cache_entry_t *c){
+    return (c&&c->def.weapon_hp>0)?c->def.weapon_hp:1;
+}
+
+static void item_break_object(world_object_t *o,const char *reason){
+    if(!o||!o->active)return;
+    const char *snd=(o->cache&&o->cache->def.weapon_broken_sound[0])?o->cache->def.weapon_broken_sound:"data/094.wav";
+    lf2_audio_play(snd);
+    lf2_logf("ITEM","break oid=%d name=%s reason=%s hp=%d",o->oid,item_name(o->oid),reason?reason:"hit",o->weapon_hp);
+    o->active=false;
+}
+
+static int item_damage_object(world_object_t *o,int injury,int bdefend,const char *source){
+    if(!o||!o->active||!o->cache)return 0;
+    if(o->weapon_hp<=0)o->weapon_hp=item_initial_weapon_hp(o->cache);
+    int old=o->weapon_hp;
+    /* Stock's bdefend:100 convention is the universal weapon breaker. Normal
+       hits subtract only positive injury; negative injury never repairs a weapon. */
+    if(bdefend>=100)o->weapon_hp=0;
+    else if(injury>0)o->weapon_hp-=injury;
+    const char *snd=o->cache->def.weapon_hit_sound[0]?o->cache->def.weapon_hit_sound:item_hit_sound(o->oid);
+    if(snd&&snd[0])lf2_audio_play(snd);
+    lf2_logf("ITEM","hurt oid=%d name=%s hp=%d->%d injury=%d bdefend=%d source=%s",
+             o->oid,item_name(o->oid),old,o->weapon_hp,injury,bdefend,source?source:"attack");
+    if(o->weapon_hp<=0){item_break_object(o,source);return 1;}
+    return 0;
+}
+
+static int item_apply_drop_hurt(world_object_t *o,float impact_speed){
+    if(!o||!o->active||!o->cache||impact_speed<=8.0f)return 0;
+    int hurt=o->cache->def.weapon_drop_hurt;
+    const char *snd=o->cache->def.weapon_drop_sound;
+    if(snd&&snd[0])lf2_audio_play(snd);
+    if(hurt<=0)return 0;
+    if(o->weapon_hp<=0)o->weapon_hp=item_initial_weapon_hp(o->cache);
+    int old=o->weapon_hp;o->weapon_hp-=hurt;
+    lf2_logf("ITEM","drop hurt oid=%d name=%s hp=%d->%d speed=%.2f hurt=%d",
+             o->oid,item_name(o->oid),old,o->weapon_hp,impact_speed,hurt);
+    if(o->weapon_hp<=0){item_break_object(o,"drop");return 1;}
+    return 0;
+}
+
 static world_object_t *spawn_pickup_item(object_world_t *w,int oid,float x,float z,float y){
     if(!w||!item_is_pickup_oid(oid))return NULL;
     object_cache_entry_t *cache=object_cache_get(w,oid);if(!cache)return NULL;
     world_object_t *o=world_alloc_object(w);if(!o)return NULL;
     o->cache=cache;o->oid=oid;o->type=cache->type;o->owner=-1;o->team=0;o->pickup_item=true;
     o->x=clampf(x,g_world_min_x,g_world_max_x);o->z=clampf(z,-65.0f,70.0f);o->y=y;o->facing=0;
-    /* weapon_hp is durability for weapons, but is NOT drink duration. Stock
-       Milk/Beer use 100/125 time units respectively. */
-    o->durability=item_is_bottle(oid)?item_units_for_oid(oid):(cache->def.weapon_hp>0?cache->def.weapon_hp:item_units_for_oid(oid));
+    /* Stock keeps bottle contents separate from weapon life. */
+    o->durability=item_is_bottle(oid)?item_units_for_oid(oid):0;
+    o->weapon_hp=item_initial_weapon_hp(cache);
     o->grounded=(y>=0.0f);o->vy=o->grounded?0.0f:0.4f;
     object_set_frame(o,o->grounded?object_ground_frame(cache):0);
     if(!o->active)return NULL;
@@ -93,7 +135,8 @@ static int release_held_throw(object_world_t *w,fighter_t *f,int owner_idx){
     world_object_t *o=world_alloc_object(w);if(!o)return 0;
     int oid=f->held_oid;
     o->cache=cache;o->oid=oid;o->type=cache->type;o->owner=owner_idx;o->team=f->team;
-    o->pickup_item=false;o->recoverable_weapon=true;o->grounded=false;o->facing=f->facing;o->x=x;o->y=y;o->z=f->z;o->durability=f->held_units;
+    o->pickup_item=false;o->recoverable_weapon=true;o->grounded=false;o->facing=f->facing;o->x=x;o->y=y;o->z=f->z;
+    o->durability=f->held_units;o->weapon_hp=f->held_weapon_hp>0?f->held_weapon_hp:item_initial_weapon_hp(cache);
     int start=item_is_heavy(oid)?0:40;
     if(start>=LF2_MAX_FRAMES||!cache->def.frames[start].present)start=0;
     object_set_frame(o,start);

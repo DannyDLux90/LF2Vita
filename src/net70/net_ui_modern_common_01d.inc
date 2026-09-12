@@ -2,14 +2,20 @@ static int adhoc_lobby_screen(bool cheat){
     int setting_sel=0;uint32_t prev=sync_buttons();uint64_t lobby_opened=sceKernelGetSystemTimeWide();uint32_t last_started_revision=0;
     for(;;){
         lf2_adhoc_lobby_update();const lf2_adhoc_lobby_t *l=lf2_adhoc_lobby();
+        int active_guest=-1;net70_active_pair_chars(l,NULL,NULL,&active_guest);
         SceCtrlData p={0};sceCtrlPeekBufferPositive(0,&p,1);uint32_t pr=p.buttons&~prev;prev=p.buttons;
         if(pr&SCE_CTRL_CIRCLE){ui_cancel();lf2_adhoc_leave();return 0;}
         if(!l->connected&&!l->host&&sceKernelGetSystemTimeWide()-lobby_opened>8000000ULL){ui_cancel();wait_message("AdHoc","Verbindung zum Host verloren oder Zeitueberschreitung.");lf2_adhoc_leave();return 0;}
         if(!l->host&&l->connected&&l->settings.status==LF2_NET_STATUS_STARTING&&l->revision!=last_started_revision){
-            uint32_t match_id=l->revision;last_started_revision=match_id;
-            int mrc=net70_run_adhoc_mode(match_id);
-            if(mrc<0){char e[128];snprintf(e,sizeof(e),"Netzwerkspiel konnte nicht gestartet werden (Fehler %d).",mrc);wait_message("AdHoc-Spiel",e);}
-            prev=sync_buttons();continue;
+            if(active_guest>0&&l->local_slot>=0){
+                uint32_t match_id=l->revision;last_started_revision=match_id;
+                if(l->local_slot==active_guest){
+                    int mrc=net70_run_adhoc_mode(match_id);
+                    if(mrc<0){char e[128];snprintf(e,sizeof(e),"Netzwerkspiel konnte nicht gestartet werden (Fehler %d).",mrc);wait_message("AdHoc-Spiel",e);}
+                    prev=sync_buttons();continue;
+                }
+                lf2_logf("NET","spectator stays in lobby slot=%d active_guest=%d match_id=%u",l->local_slot,active_guest,(unsigned)match_id);
+            }
         }
         bool modifier=(p.buttons&SCE_CTRL_TRIANGLE)!=0;
         if(pr&(SCE_CTRL_LTRIGGER|SCE_CTRL_RTRIGGER)){
@@ -34,8 +40,10 @@ static int adhoc_lobby_screen(bool cheat){
                 lf2_adhoc_lobby_host_settings(&st);ui_join();
             }
             if(pr&SCE_CTRL_START){
-                int present=0,ready=0;for(int i=0;i<8;i++)if(l->players[i].present){present++;if(l->players[i].ready)ready++;}
-                if(present==2&&ready==present){
+                int active=-1;int pair_rc=net70_active_pair_chars(l,NULL,NULL,&active);
+                bool host_ready=l->players[0].present&&l->players[0].ready;
+                bool guest_ready=active>0&&l->players[active].present&&l->players[active].ready;
+                if(pair_rc==0&&host_ready&&guest_ready){
                     lf2_adhoc_lobby_host_status(LF2_NET_STATUS_STARTING);
                     l=lf2_adhoc_lobby();uint32_t match_id=l->revision;last_started_revision=match_id;ui_ok();
                     int mrc=net70_run_adhoc_mode(match_id);
@@ -43,11 +51,10 @@ static int adhoc_lobby_screen(bool cheat){
                     lf2_adhoc_lobby_set_ready(false);
                     if(mrc<0){char e[128];snprintf(e,sizeof(e),"Netzwerkspiel wurde getrennt oder konnte nicht starten (Fehler %d).",mrc);wait_message("AdHoc-Spiel",e);}
                     prev=sync_buttons();
-                } else if(present!=2){wait_message("AdHoc-Spiel","Der aktive Lockstep ist derzeit fuer zwei Vitas validiert. Die Lobby darf bereits bis zu acht Spieler aufnehmen.");prev=sync_buttons();}
-                else {ui_cancel();}
+                } else {ui_cancel();}
             }
         }
-        l=lf2_adhoc_lobby();
+        l=lf2_adhoc_lobby();active_guest=-1;net70_active_pair_chars(l,NULL,NULL,&active_guest);
         vita2d_start_drawing();vita2d_clear_screen();
         vita2d_draw_rectangle(0,0,960,544,RGBA8(10,14,21,255));
         vita2d_draw_rectangle(0,0,960,72,RGBA8(20,27,39,255));
@@ -61,6 +68,7 @@ static int adhoc_lobby_screen(bool cheat){
         char values[4][64];snprintf(values[0],64,"%s",lf2_net_mode_name(l->settings.mode));snprintf(values[1],64,"%u Vitas",(unsigned)l->settings.max_players);if(l->settings.mode==LF2_NET_MODE_STAGE)snprintf(values[2],64,"Stage %d",(l->settings.stage%5)+1);else snprintf(values[2],64,"%s",g_stages[l->settings.stage%STAGE_COUNT].name);snprintf(values[3],64,"%s",ui_diff_name(l->settings.difficulty));
         int rows=4;float step=66.0f;
         for(int i=0;i<rows;i++){float ry=128+i*step;float rh=58.0f;if(l->host&&setting_sel==i){vita2d_draw_rectangle(634,ry,288,rh,RGBA8(51,113,205,255));net70_draw_outline(634,ry,288,rh,RGBA8(139,202,255,255));}net70_text(650,ry+18,0.55f,RGBA8(166,186,211,255),labels[i]);net70_text(650,ry+39,0.68f,RGBA8(250,252,255,255),values[i]);}
+        if(!l->host&&l->local_slot>0&&active_guest>0&&l->local_slot!=active_guest)net70_text(24,478,0.58f,RGBA8(160,205,255,255),"Zuschauer: aktiver Kampfspieler ist der erste Gast-Slot.");
         if(l->settings.mode==LF2_NET_MODE_2V2)net70_text(24,502,0.64f,RGBA8(224,234,247,255),"L/R Held   Dreieck+L/R Partner   Quadrat Bereit   Kreis Zurueck");
         else if(l->settings.mode==LF2_NET_MODE_BATTLE)net70_text(24,502,0.59f,RGBA8(224,234,247,255),"L/R Held   Dreieck+L/R Begleiter   Dreieck+Hoch/Runter Anzahl");
         else net70_text(24,502,0.68f,RGBA8(224,234,247,255),"L/R Charakter    Quadrat Bereit    Kreis Zurueck");

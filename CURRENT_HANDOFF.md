@@ -64,6 +64,11 @@ All five lobby modes route through the native Vita path for the active host/gues
 - Native Vita AdHoc must never be routed through the reduced retail-PC input adapter.
 - Original LF2 2.00a PC interoperability remains a separate TCP/12345 path with stock 8-bit controls and stock-simulation compatibility work.
 
+## Current checkpoint
+- Integration branch head contains AdHoc v6, Championship flows, 8-slot lobby selection and spectator-safe active-peer selection.
+- This checkpoint is ready to be fast-forwarded to `pc-compat-wip` for official VitaSDK CI.
+- After CI, continue optimization/mode fidelity work without requiring an immediate user hardware test.
+
 ## Next action after a chat restart
 1. Read this file and `PC_COMPAT_WIP.md`.
 2. Confirm `pc-compat-wip` head, `main` head, and latest CI run.

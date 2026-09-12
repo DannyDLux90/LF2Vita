@@ -46,7 +46,7 @@ int lf2_adhoc_match_begin(uint32_t match_id){
         if(g_match_inputs[i].valid&&g_match_inputs[i].match_id!=match_id)g_match_inputs[i].valid=false;
     g_native_match_id=match_id;g_native_match_frame=0;g_native_match_active=true;
     g_native_prev_physical=0;g_native_wait_total_us=0;g_native_wait_max_us=0;g_native_wait_samples=0;g_native_buffer_hits=0;
-    lf2_log_stage("network:adhoc_match_begin","id=%u role=%s peer=%08X input_delay=1 redundancy=1",(unsigned)match_id,g_host?"host":"client",(unsigned)peer.s_addr);
+    lf2_log_stage("network:adhoc_match_begin","id=%u role=%s peer=%08X input_delay=1 redundancy=1 barrier=1 resend_ms=10 timeout_ms=900",(unsigned)match_id,g_host?"host":"client",(unsigned)peer.s_addr);
     return 0;
 }
 
@@ -66,27 +66,36 @@ bool lf2_adhoc_lockstep_frame(void *userdata,uint32_t local_held[4],uint32_t rem
     match_input_packet_t p;memset(&p,0,sizeof(p));
     p.h.magic=LF2_NET_MAGIC;p.h.proto=LF2_ADHOC_PROTO_VERSION;p.h.type=PKT_MATCH_INPUT;p.h.size=sizeof(p);p.h.seq=g_seq++;
     p.match_id=g_native_match_id;p.frame=send_frame;p.held=physical_local;
-    p.prev_frame=(frame==0)?0xffffffffu:frame;p.prev_held=g_native_prev_physical;
+    /* The redundant field always carries the simulation frame we are about to
+       consume. On frame 0 that is a neutral post-load barrier: both Vitas have
+       finished loading before either simulation advances. */
+    p.prev_frame=frame;p.prev_held=scheduled_local;
 
-    uint32_t peer_held=0;bool got=(frame==0);bool sent=false;
-    uint64_t wait_start=now_us();
-    if(frame>0){
-        queued_event_t e;while(pop_event(&e)){if(!native_match_service_event(&e))return false;}
-        if(take_match_input(g_native_match_id,frame,&peer_held)){got=true;g_native_buffer_hits++;}
-    }
+    uint32_t peer_held=0;bool got=false;bool sent=false;
+    uint64_t wait_start=now_us(),last_send=0;uint32_t frame_resends=0;
+    queued_event_t e;while(pop_event(&e)){if(!native_match_service_event(&e))return false;}
+    if(take_match_input(g_native_match_id,frame,&peer_held)){got=true;g_native_buffer_hits++;}
 
-    /* 350 ms is intentionally far below the old five-second freeze. The
-       redundant previous-frame field means one lost/delayed packet is repaired
-       by the next packet while preserving deterministic lockstep. */
-    uint64_t deadline=wait_start+350000ULL;
+    /* Browser RTT in the hardware logs is ~14 ms, but matching delivery showed
+       rare 300+ ms scheduler spikes. Keep the one-TU input delay, tolerate those
+       spikes, and retransmit the same current+next frame every 10 ms while
+       blocked. This fixes the deadlock where a successfully queued-but-lost
+       packet could only be repeated by a next simulation tick that never ran. */
+    uint64_t deadline=wait_start+900000ULL;
     while(now_us()<deadline){
-        if(!sent){int rc=send_to(&peer,&p,sizeof(p));if(rc>=0)sent=true;else if(rc!=SCE_NET_ADHOC_MATCHING_ERROR_DATA_BUSY){g_native_match_active=false;return false;}}
-        queued_event_t e;bool any=false;while(pop_event(&e)){any=true;if(!native_match_service_event(&e))return false;}
-        if(!got&&frame>0&&take_match_input(g_native_match_id,frame,&peer_held))got=true;
+        uint64_t n=now_us();
+        if(!sent||(!got&&n-last_send>=10000ULL)){
+            p.h.seq=g_seq++;
+            int rc=send_to(&peer,&p,sizeof(p));
+            if(rc>=0){if(sent)frame_resends++;sent=true;last_send=n;}
+            else if(rc!=SCE_NET_ADHOC_MATCHING_ERROR_DATA_BUSY){g_native_match_active=false;return false;}
+        }
+        bool any=false;while(pop_event(&e)){any=true;if(!native_match_service_event(&e))return false;}
+        if(!got&&take_match_input(g_native_match_id,frame,&peer_held))got=true;
         if(sent&&got)break;
-        if(!any)sceKernelDelayThread(250);
+        if(!any)sceKernelDelayThread(500);
     }
-    if(!sent||!got){lf2_logf("NET","native lockstep timeout id=%u frame=%u sent=%d got=%d",(unsigned)g_native_match_id,(unsigned)frame,sent?1:0,got?1:0);g_native_match_active=false;return false;}
+    if(!sent||!got){lf2_logf("NET","native lockstep timeout id=%u frame=%u sent=%d got=%d wait_us=%llu resends=%u",(unsigned)g_native_match_id,(unsigned)frame,sent?1:0,got?1:0,(unsigned long long)(now_us()-wait_start),(unsigned)frame_resends);g_native_match_active=false;return false;}
 
     uint64_t waited=now_us()-wait_start;g_native_wait_total_us+=waited;g_native_wait_samples++;if(waited>g_native_wait_max_us)g_native_wait_max_us=waited;
     memset(remote_held,0,sizeof(uint32_t)*4);
@@ -96,9 +105,9 @@ bool lf2_adhoc_lockstep_frame(void *userdata,uint32_t local_held[4],uint32_t rem
     g_native_match_frame++;
     if(frame==0||(frame%300u)==0u){
         uint64_t avg=g_native_wait_samples?g_native_wait_total_us/g_native_wait_samples:0;
-        lf2_logf("NET","native lockstep id=%u frame=%u hostmask=%08X clientmask=%08X wait_avg_us=%llu wait_max_us=%llu buffered=%u/%u",
+        lf2_logf("NET","native lockstep id=%u frame=%u hostmask=%08X clientmask=%08X wait_avg_us=%llu wait_max_us=%llu buffered=%u/%u frame_resends=%u",
                  (unsigned)g_native_match_id,(unsigned)frame,(unsigned)local_held[0],(unsigned)remote_held[0],
-                 (unsigned long long)avg,(unsigned long long)g_native_wait_max_us,(unsigned)g_native_buffer_hits,(unsigned)g_native_wait_samples);
+                 (unsigned long long)avg,(unsigned long long)g_native_wait_max_us,(unsigned)g_native_buffer_hits,(unsigned)g_native_wait_samples,(unsigned)frame_resends);
     }
     return true;
 }

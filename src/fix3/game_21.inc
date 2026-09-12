@@ -43,7 +43,7 @@
                 stock_tu++;
                 if(stock_tu==1||(stock_tu%30u)==0u){
                     uint32_t digest=stock_state_digest(fighters,total,world,item_drop_timer);
-                    lf2_logf("NETSTATE","tu=%u digest=%08X",(unsigned)stock_tu,digest);
+                    lf2_logf("NETSTATE","tu=%u digest=%08X",(unsigned)stock_tu,digest);if(options->lockstep_state)options->lockstep_state(options->remote_userdata,stock_tu,digest);
                 }
             }
             acc_us-=sim_step_us;

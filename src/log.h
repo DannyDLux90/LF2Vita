@@ -8,4 +8,6 @@ void lf2_log_stage(const char *stage, const char *fmt, ...);
 void lf2_log_memory(const char *tag);
 void lf2_log_install_signal_handlers(void);
 const char *lf2_log_path(void);
+void lf2_log_set_network_fast_path(int enabled);
+void lf2_log_flush(void);
 #endif

@@ -23,13 +23,22 @@
 #define LF2_NET_POOL (1024*1024)
 #define LF2_MATCH_RX 0x4000
 #define LF2_MATCH_HELLO_US 500000
-#define LF2_MATCH_PING_US 1000000
+#define LF2_MATCH_PING_US 500000
+#define LF2_MATCH_RETRY_COUNT 5
+#define LF2_MATCH_REXMT_US 30000
+#define LF2_EVENT_QUEUE_CAP 256
+#define LF2_MATCH_INPUT_WINDOW 8
+#define LF2_MATCH_CACHE_CAP 64
+#define LF2_NATIVE_RESEND_US 8000ULL
+#define LF2_NATIVE_BARRIER_RESEND_US 50000ULL
+#define LF2_NATIVE_FRAME_TIMEOUT_US 1500000ULL
+#define LF2_NATIVE_BARRIER_TIMEOUT_US 5000000ULL
 /* Matching creates an internal Vita user thread. 0x40 is a PSP-era priority
    and is not a valid Vita user-thread priority. Keep it in the same range as
    LF2Vita's audio worker and give the matching worker a full 64 KiB stack. */
 #define LF2_MATCH_THREAD_PRIORITY 0x10000100
 #define LF2_MATCH_THREAD_STACK    0x10000
-#define LF2_MATCH_THREAD_AFFINITY SCE_KERNEL_CPU_MASK_USER_0
+#define LF2_MATCH_THREAD_AFFINITY SCE_KERNEL_CPU_MASK_USER_2
 #define LF2_NET_MAGIC 0x304E324Cu /* L2N0 */
 #define LF2_HELLO_MAGIC 0x4832464Cu /* LF2H */
 
@@ -106,12 +115,17 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     packet_hdr_t h;
     uint32_t match_id;
-    /* newest input is scheduled one simulation tick ahead; the previous
-       scheduled frame is repeated in the same packet for loss recovery. */
-    uint32_t frame;
-    uint32_t held;
-    uint32_t prev_frame;
-    uint32_t prev_held;
+    /* Each packet carries the newest scheduled input plus up to seven older
+       frames. Any later packet can therefore repair a short loss/reorder burst
+       without changing the deterministic one-TU input delay. */
+    uint32_t first_frame;
+    uint32_t newest_frame;
+    uint32_t ack_frame;
+    uint32_t state_tu;
+    uint32_t state_digest;
+    uint8_t count;
+    uint8_t reserved[3];
+    uint32_t held[LF2_MATCH_INPUT_WINDOW];
 } match_input_packet_t;
 
 typedef struct {
@@ -157,7 +171,7 @@ static char g_error[160];
 static char g_diag[192]="Netzwerk noch nicht gestartet";
 static int g_adhoc_state=-1;
 static int g_adhoc_state_rc=0;
-static queued_event_t g_events[64];
+static queued_event_t g_events[LF2_EVENT_QUEUE_CAP];
 static volatile int g_ev_head,g_ev_tail;
 static SceKernelLwMutexWork g_event_mutex;
 static lf2_adhoc_session_t g_sessions[LF2_ADHOC_MAX_SESSIONS];
@@ -186,7 +200,22 @@ static uint64_t g_native_wait_total_us;
 static uint64_t g_native_wait_max_us;
 static uint32_t g_native_wait_samples;
 static uint32_t g_native_buffer_hits;
-static match_input_cache_t g_match_inputs[16];
+static uint32_t g_native_retransmits;
+static uint32_t g_native_data_timeouts;
+static uint32_t g_native_soft_drops;
+static uint32_t g_event_drops;
+static uint32_t g_event_peak;
+static uint32_t g_native_peer_highest;
+static uint32_t g_native_state_tu;
+static uint32_t g_native_state_digest;
+static uint32_t g_native_peer_state_tu;
+static uint32_t g_native_peer_state_digest;
+static uint32_t g_native_desyncs;
+static bool g_native_desync;
+static uint64_t g_last_lobby_broadcast;
+static uint64_t g_last_player_refresh;
+static match_input_cache_t g_match_inputs[LF2_MATCH_CACHE_CAP];
+static match_input_cache_t g_local_inputs[LF2_MATCH_CACHE_CAP];
 static bool g_mutex_ready;
 static bool g_mod_net_loaded,g_mod_adhoc_loaded,g_mod_matching_loaded;
 static bool g_net_ready,g_netctl_ready,g_adhoc_ready,g_ctl_ready,g_matching_ready;

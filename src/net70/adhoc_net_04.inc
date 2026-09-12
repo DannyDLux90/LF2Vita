@@ -10,19 +10,35 @@ static void host_complete(const queued_event_t *e){pending_t *p=pending_find(e->
 
 static void host_remove(uint32_t a){peer_t *peer=peer_find(a);if(peer){int slot=peer->slot;memset(peer,0,sizeof(*peer));if(slot>0&&slot<LF2_ADHOC_MAX_PLAYERS)memset(&g_lobby.players[slot],0,sizeof(g_lobby.players[slot]));g_lobby.revision++;broadcast_lobby();}}
 
-static void cache_match_input_one(uint32_t match_id,uint32_t frame,uint32_t held){
-    match_input_cache_t *c=&g_match_inputs[frame%(sizeof(g_match_inputs)/sizeof(g_match_inputs[0]))];
+static void cache_input_one(match_input_cache_t *cache,uint32_t match_id,uint32_t frame,uint32_t held){
+    match_input_cache_t *c=&cache[frame%LF2_MATCH_CACHE_CAP];
     c->valid=true;c->match_id=match_id;c->frame=frame;c->held=held;
 }
 
+static bool peek_input_one(match_input_cache_t *cache,uint32_t match_id,uint32_t frame,uint32_t *held){
+    match_input_cache_t *c=&cache[frame%LF2_MATCH_CACHE_CAP];
+    if(!c->valid||c->match_id!=match_id||c->frame!=frame)return false;
+    if(held)*held=c->held;return true;
+}
+
+static void native_compare_state_if_ready(void){
+    if(!g_native_match_active||!g_native_state_tu||g_native_state_tu!=g_native_peer_state_tu)return;
+    if(g_native_state_digest!=g_native_peer_state_digest&&!g_native_desync){
+        g_native_desync=true;g_native_desyncs++;
+        lf2_logf("NETDESYNC","id=%u tu=%u local=%08X peer=%08X",(unsigned)g_native_match_id,(unsigned)g_native_state_tu,(unsigned)g_native_state_digest,(unsigned)g_native_peer_state_digest);
+    }
+}
+
 static void cache_match_input(const match_input_packet_t *p){
-    if(!p)return;
-    cache_match_input_one(p->match_id,p->frame,p->held);
-    if(p->prev_frame!=0xffffffffu)cache_match_input_one(p->match_id,p->prev_frame,p->prev_held);
+    if(!p||p->count<1||p->count>LF2_MATCH_INPUT_WINDOW||p->newest_frame<p->first_frame)return;
+    uint32_t expected=p->newest_frame-p->first_frame+1u;if(expected!=(uint32_t)p->count)return;
+    for(uint32_t i=0;i<(uint32_t)p->count;i++)cache_input_one(g_match_inputs,p->match_id,p->first_frame+i,p->held[i]);
+    if(p->newest_frame>g_native_peer_highest)g_native_peer_highest=p->newest_frame;
+    if(p->state_tu&&p->state_tu>=g_native_peer_state_tu){g_native_peer_state_tu=p->state_tu;g_native_peer_state_digest=p->state_digest;native_compare_state_if_ready();}
 }
 
 static bool take_match_input(uint32_t match_id,uint32_t frame,uint32_t *held){
-    match_input_cache_t *c=&g_match_inputs[frame%(sizeof(g_match_inputs)/sizeof(g_match_inputs[0]))];
+    match_input_cache_t *c=&g_match_inputs[frame%LF2_MATCH_CACHE_CAP];
     if(!c->valid||c->match_id!=match_id||c->frame!=frame)return false;
     if(held)*held=c->held;c->valid=false;return true;
 }
@@ -30,7 +46,7 @@ static bool take_match_input(uint32_t match_id,uint32_t frame,uint32_t *held){
 static void process_packet(const queued_event_t *e){
     if(e->len<(int)sizeof(packet_hdr_t))return;packet_hdr_t h;memcpy(&h,e->data,sizeof(h));if(h.magic!=LF2_NET_MAGIC||h.proto!=LF2_ADHOC_PROTO_VERSION||h.size>e->len)return;
     if(h.type==PKT_LOBBY&&!g_host&&e->len>=(int)sizeof(lobby_packet_t)){lobby_packet_t p;memcpy(&p,e->data,sizeof(p));g_lobby.active=true;g_lobby.connected=true;g_lobby.host=false;g_joining=false;g_lobby.settings=p.settings;g_lobby.revision=p.revision;memcpy(g_lobby.players,p.players,sizeof(g_lobby.players));g_lobby.local_slot=-1;for(int i=0;i<LF2_ADHOC_MAX_PLAYERS;i++)if(g_lobby.players[i].present&&g_lobby.players[i].peer_id==g_local_peer_id){g_lobby.local_slot=i;break;}if(g_lobby.revision!=g_last_logged_revision){lf2_logf("NET","lobby state rev=%u local_slot=%d mode=%s players_max=%u stage=%u difficulty=%u status=%s",g_lobby.revision,g_lobby.local_slot,lf2_net_mode_name(g_lobby.settings.mode),g_lobby.settings.max_players,g_lobby.settings.stage,g_lobby.settings.difficulty,lf2_net_status_name(g_lobby.settings.status));g_last_logged_revision=g_lobby.revision;}return;}
-    if(h.type==PKT_PLAYER&&g_host&&e->len>=(int)sizeof(player_packet_t)){peer_t *peer=peer_find(e->addr.s_addr);if(!peer)return;player_packet_t p;memcpy(&p,e->data,sizeof(p));lf2_net_player_t *pl=&g_lobby.players[peer->slot];pl->character=p.character;pl->ready=p.ready;g_lobby.revision++;lf2_logf("NET","player update slot=%d name=%s character=%u ready=%u rev=%u",peer->slot,pl->name,pl->character,pl->ready,g_lobby.revision);broadcast_lobby();return;}
+    if(h.type==PKT_PLAYER&&g_host&&e->len>=(int)sizeof(player_packet_t)){peer_t *peer=peer_find(e->addr.s_addr);if(!peer)return;player_packet_t p;memcpy(&p,e->data,sizeof(p));lf2_net_player_t *pl=&g_lobby.players[peer->slot];if(pl->character!=p.character||pl->ready!=p.ready){pl->character=p.character;pl->ready=p.ready;g_lobby.revision++;lf2_logf("NET","player update slot=%d name=%s character=%u ready=%u rev=%u",peer->slot,pl->name,pl->character,pl->ready,g_lobby.revision);broadcast_lobby();}return;}
     if(h.type==PKT_PING&&g_host&&e->len>=(int)sizeof(ping_packet_t)){ping_packet_t p;memcpy(&p,e->data,sizeof(p));p.h.type=PKT_PONG;p.h.seq=g_seq++;send_to(&e->addr,&p,sizeof(p));return;}
     if(h.type==PKT_PONG&&!g_host&&e->len>=(int)sizeof(ping_packet_t)){ping_packet_t p;memcpy(&p,e->data,sizeof(p));uint64_t d=now_us()-p.stamp_us;g_lobby.host_ping_ms=(uint16_t)(d/1000>65534?65534:d/1000);return;}
     if(h.type==PKT_MATCH_INPUT&&e->len>=(int)sizeof(match_input_packet_t)){match_input_packet_t p;memcpy(&p,e->data,sizeof(p));cache_match_input(&p);return;}

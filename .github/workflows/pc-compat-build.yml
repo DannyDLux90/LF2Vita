@@ -29,6 +29,9 @@ jobs:
           arm-vita-eabi-gcc --version
           cmake --version
 
+      - name: Test native AdHoc protocol
+        run: python3 tools/test_adhoc_protocol.py
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 

@@ -1,6 +1,6 @@
 int lf2_adhoc_init(void){
     if(g_init)return 0;
-    g_error[0]=0;memset(&g_lobby,0,sizeof(g_lobby));g_ev_head=g_ev_tail=0;
+    g_error[0]=0;memset(&g_lobby,0,sizeof(g_lobby));g_ev_head=g_ev_tail=0;g_event_drops=0;g_event_peak=0;g_last_lobby_broadcast=0;g_last_player_refresh=0;
     int rc=sceKernelCreateLwMutex(&g_event_mutex,"lf2adhoc",0,0,NULL);
     if(rc<0){set_error("CreateLwMutex",rc);return rc;}g_mutex_ready=true;
 
@@ -64,12 +64,12 @@ const char *lf2_adhoc_local_name(void){return g_name;}uint32_t lf2_adhoc_local_a
 static int start_matching(int mode,const void *hello,int hello_len){
     clear_match();g_ev_head=g_ev_tail=0;
     refresh_adhoc_diag("vor MatchingCreate");lf2_logf("NET","%s",g_diag);
-    g_match=sceNetAdhocMatchingCreate(mode,LF2_ADHOC_MAX_PLAYERS,LF2_MATCH_PORT,LF2_MATCH_RX,LF2_MATCH_HELLO_US,LF2_MATCH_PING_US,3,200000,matching_cb);
+    g_match=sceNetAdhocMatchingCreate(mode,LF2_ADHOC_MAX_PLAYERS,LF2_MATCH_PORT,LF2_MATCH_RX,LF2_MATCH_HELLO_US,LF2_MATCH_PING_US,LF2_MATCH_RETRY_COUNT,LF2_MATCH_REXMT_US,matching_cb);
     if(g_match<0){set_error("MatchingCreate",g_match);return g_match;}
     int rc=sceNetAdhocMatchingStart(g_match,LF2_MATCH_THREAD_PRIORITY,LF2_MATCH_THREAD_STACK,LF2_MATCH_THREAD_AFFINITY,hello_len,(void*)hello);
     if(rc<0){set_error("MatchingStart",rc);clear_match();return rc;}
     refresh_adhoc_diag(mode==SCE_NET_ADHOC_MATCHING_MODE_PARENT?"Matching HOST gestartet":"Matching BROWSER gestartet");
-    lf2_logf("NET","%s pri=0x%08X stack=0x%X affinity=0x%X",g_diag,LF2_MATCH_THREAD_PRIORITY,LF2_MATCH_THREAD_STACK,LF2_MATCH_THREAD_AFFINITY);
+    lf2_logf("NET","%s pri=0x%08X stack=0x%X affinity=0x%X retry=%d rexmt_us=%u",g_diag,LF2_MATCH_THREAD_PRIORITY,LF2_MATCH_THREAD_STACK,LF2_MATCH_THREAD_AFFINITY,LF2_MATCH_RETRY_COUNT,(unsigned)LF2_MATCH_REXMT_US);
     return 0;
 }
 

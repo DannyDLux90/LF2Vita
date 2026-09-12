@@ -16,24 +16,36 @@
 static SceUID g_log=-1;
 static char g_last_stage[128]="boot";
 static unsigned long long g_last_sync_ms;
+static unsigned long long g_sync_interval_ms=250ULL;
+static int g_network_fast_path;
 
 static void write_all(SceUID fd,const char *s,int n){
     while(n>0){int w=sceIoWrite(fd,s,n);if(w<=0)break;s+=w;n-=w;}
 }
 static void sync_log(void){if(g_log>=0)sceIoSyncByFd(g_log,0);}
 static unsigned long long ms_now(void){return (unsigned long long)(sceKernelGetProcessTimeWide()/1000ULL);}
+void lf2_log_flush(void){sync_log();g_last_sync_ms=ms_now();}
+void lf2_log_set_network_fast_path(int enabled){
+    g_network_fast_path=enabled?1:0;
+    g_sync_interval_ms=g_network_fast_path?1500ULL:250ULL;
+    if(!g_network_fast_path)lf2_log_flush();
+}
 
 const char *lf2_log_path(void){return LOG_FILE;}
 
 void lf2_logf(const char *level,const char *fmt,...){
     if(g_log<0)return;
+    /* High-frequency animation/audio trace is useful while debugging gameplay,
+       but synchronous file traffic is counterproductive inside the 30-Hz
+       network critical path. Keep NET/NETSTATE/HIT/GAME/STAGE diagnostics. */
+    if(g_network_fast_path&&level&&(!strcmp(level,"ANIM")||!strcmp(level,"AUDIO")))return;
     char body[1400],line[1536];va_list ap;va_start(ap,fmt);vsnprintf(body,sizeof(body),fmt,ap);va_end(ap);
     int n=snprintf(line,sizeof(line),"[%010llu ms] %-5s %s\n",ms_now(),level?level:"INFO",body);
     if(n>0)write_all(g_log,line,n<(int)sizeof(line)?n:(int)sizeof(line)-1);
     /* Keep diagnostics recoverable even if a Vita is hard-exited during a
        network match, without forcing a filesystem sync for every ANIM line. */
     unsigned long long now=ms_now();
-    if(now-g_last_sync_ms>=250ULL){sync_log();g_last_sync_ms=now;}
+    if(now-g_last_sync_ms>=g_sync_interval_ms){sync_log();g_last_sync_ms=now;}
 }
 
 void lf2_log_memory(const char *tag){

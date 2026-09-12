@@ -19,14 +19,24 @@ static uint32_t local_avatar_hash(void){
 }
 
 static void queue_event(int event,const SceNetInAddr *addr,const void *data,int len){
+    /* DATA_CONFIRM is only transport bookkeeping. Queuing every confirmation
+       can crowd out real input packets during a retransmit burst, so let the
+       matching library consume it internally and keep our main-thread queue
+       for state/data events only. */
+    if(event==MATCH_DATA_CONFIRM)return;
     sceKernelLockLwMutex(&g_event_mutex,1,NULL);
-    int next=(g_ev_tail+1)%64;
-    if(next!=g_ev_head){queued_event_t *q=&g_events[g_ev_tail];memset(q,0,sizeof(*q));q->event=event;if(addr)q->addr=*addr;q->when_us=now_us();if(data&&len>0){if(len>(int)sizeof(q->data))len=sizeof(q->data);memcpy(q->data,data,len);q->len=len;}g_ev_tail=next;}
+    int next=(g_ev_tail+1)%LF2_EVENT_QUEUE_CAP;
+    if(next!=g_ev_head){
+        queued_event_t *q=&g_events[g_ev_tail];memset(q,0,sizeof(*q));q->event=event;if(addr)q->addr=*addr;q->when_us=now_us();
+        if(data&&len>0){if(len>(int)sizeof(q->data))len=sizeof(q->data);memcpy(q->data,data,len);q->len=len;}
+        g_ev_tail=next;
+        uint32_t depth=(uint32_t)((g_ev_tail-g_ev_head+LF2_EVENT_QUEUE_CAP)%LF2_EVENT_QUEUE_CAP);if(depth>g_event_peak)g_event_peak=depth;
+    }else g_event_drops++;
     sceKernelUnlockLwMutex(&g_event_mutex,1);
 }
 
 static void matching_cb(int id,int event,SceNetInAddr *addr,SceSize opt_len,void *opt){(void)id;queue_event(event,addr,opt,(int)opt_len);}
-static bool pop_event(queued_event_t *out){bool ok=false;sceKernelLockLwMutex(&g_event_mutex,1,NULL);if(g_ev_head!=g_ev_tail){*out=g_events[g_ev_head];g_ev_head=(g_ev_head+1)%64;ok=true;}sceKernelUnlockLwMutex(&g_event_mutex,1);return ok;}
+static bool pop_event(queued_event_t *out){bool ok=false;sceKernelLockLwMutex(&g_event_mutex,1,NULL);if(g_ev_head!=g_ev_tail){*out=g_events[g_ev_head];g_ev_head=(g_ev_head+1)%LF2_EVENT_QUEUE_CAP;ok=true;}sceKernelUnlockLwMutex(&g_event_mutex,1);return ok;}
 
 const char *lf2_net_mode_name(int m){static const char *n[]={"VS","Stage","Battle","1 vs 1","2 vs 2"};return (m>=0&&m<5)?n[m]:"?";}
 const char *lf2_net_status_name(int s){static const char *n[]={"Warte auf Spieler","Startet","Im Spiel","Ergebnis"};return (s>=0&&s<4)?n[s]:"Unbekannt";}

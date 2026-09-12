@@ -57,6 +57,7 @@ typedef void (*lf2_remote_frame_fn)(void *userdata);
    latched value (original LF2 samples controls on its network cadence).
    remote_held[] returns the four slots owned by the other machine. */
 typedef bool (*lf2_lockstep_frame_fn)(void *userdata, uint32_t local_held[4], uint32_t remote_held[4]);
+typedef void (*lf2_lockstep_state_fn)(void *userdata, uint32_t tu, uint32_t digest);
 
 typedef struct {
     int roster_idx;
@@ -129,6 +130,7 @@ typedef struct {
        runtime disables Vita-only shortcut buttons and advances each gameplay
        tick only after this callback returns the peer input for that tick. */
     lf2_lockstep_frame_fn lockstep_frame;
+    lf2_lockstep_state_fn lockstep_state;
     void *remote_userdata;
 
     /* Deterministic stock-reference runner.  When reference_tu_limit is
@@ -195,6 +197,16 @@ typedef struct {
     int *ally_hp_out;
     int *ally_mp_out;
     const char *hud_prefix;
+
+    /* Optional native Vita AdHoc control map for cooperative Stage Mode.
+       Control 1 is the host Vita and control 5 is the joining Vita, matching
+       lf2_run_match_ex()'s native lockstep convention. Enemies remain AI. */
+    bool lockstep_actor_map_enabled;
+    bool lockstep_native_vita_input;
+    uint8_t lockstep_actor_control[LF2_STAGE_MAX_ALLIES+1];
+    lf2_lockstep_frame_fn lockstep_frame;
+    lf2_lockstep_state_fn lockstep_state;
+    void *remote_userdata;
 } lf2_stage_runtime_t;
 
 int lf2_run_stage_section(vita2d_pgf *font, vita2d_texture *stage_bg,

@@ -2,6 +2,19 @@
     return n;
 }
 
+static fighter_t *stage_party_focus(fighter_t *fighters,int first_enemy_slot){
+    if(!fighters)return NULL;
+    fighter_t *best=NULL;
+    for(int i=0;i<first_enemy_slot;i++)if(fighters[i].active&&!fighters[i].dead&&fighters[i].human_no>0){if(!best||fighters[i].x>best->x)best=&fighters[i];}
+    return best?best:&fighters[0];
+}
+
+static bool stage_party_alive(fighter_t *fighters,int first_enemy_slot){
+    if(!fighters)return false;
+    for(int i=0;i<first_enemy_slot;i++)if(fighters[i].active&&!fighters[i].dead&&fighters[i].hp>0&&fighters[i].human_no>0)return true;
+    return false;
+}
+
 static void stage_camera_update(fighter_t *player,int bound){
     float max_cam=(float)bound-920.0f;if(max_cam<0)max_cam=0;
     float target=player?player->x-285.0f:0.0f;
@@ -62,6 +75,12 @@ int lf2_run_stage_section(vita2d_pgf *font, vita2d_texture *stage_bg,
             lf2_log_stage("stage:ally_ready","slot=%d fighter=%s hp=%d mp=%d",slot,fighters[slot].def.name,fighters[slot].hp,fighters[slot].mp);
         }
     }
+    if(stage->lockstep_actor_map_enabled){
+        for(int i=0;i<first_enemy_slot&&i<(LF2_STAGE_MAX_ALLIES+1);i++){
+            uint8_t ctl=stage->lockstep_actor_control[i];
+            if(ctl>=1&&ctl<=8&&fighters[i].active){fighters[i].ai=false;fighters[i].human_no=(int)ctl;lf2_log_stage("stage:vita_control","actor=%d control=%u fighter=%s",i,(unsigned)ctl,fighters[i].def.name);}
+        }
+    }
     /* Stage-authored milk/beer/weapons are cached before the simulation starts,
        so their first appearance cannot stall a wave transition either. */
     stage_preload_items(world,stage);
@@ -75,7 +94,7 @@ int lf2_run_stage_section(vita2d_pgf *font, vita2d_texture *stage_bg,
                   stage->hud_prefix?stage->hud_prefix:"Stage",stage->phase_count,ally_count,last_enemy_slot-first_enemy_slot+1,stage->phases[0].bound,final_bound);
 
     uint32_t prev=0;SceCtrlData first={0};sceCtrlPeekBufferPositive(0,&first,1);prev=first.buttons;
-    uint32_t pending_pressed=0;bool paused=false;int result=LF2_MATCH_CANCEL;
+    uint32_t pending_pressed=0;uint32_t lock_actor_prev[8]={0};bool paused=false;bool network_abort=false;int result=LF2_MATCH_CANCEL;uint32_t network_tu=0;
     const uint64_t sim_step_us=33333;
     uint64_t last_us=sceKernelGetSystemTimeWide(),acc_us=0,result_since=0;
     srand(0x53544765u+(unsigned)player_index*31u+(unsigned)difficulty*113u);
@@ -84,20 +103,20 @@ int lf2_run_stage_section(vita2d_pgf *font, vita2d_texture *stage_bg,
         SceCtrlData pad={0};sceCtrlPeekBufferPositive(0,&pad,1);
         uint32_t raw_pressed=pad.buttons&~prev;prev=pad.buttons;pending_pressed|=raw_pressed;
         uint64_t now=sceKernelGetSystemTimeWide(),dt=now-last_us;last_us=now;if(dt>100000)dt=100000;
-        if(raw_pressed&SCE_CTRL_START){paused=!paused;acc_us=0;pending_pressed=0;}
+        if(!stage->lockstep_actor_map_enabled&&(raw_pressed&SCE_CTRL_START)){paused=!paused;acc_us=0;pending_pressed=0;}
         if(paused){
             if(raw_pressed&SCE_CTRL_CIRCLE){result=LF2_MATCH_CANCEL;break;}
             draw_match(font,stage_bg,fighters,world,total-1,difficulty,cheat_enabled,true,&opt);continue;
         }
 
-        if(fighters[0].dead){
+        if((stage->lockstep_actor_map_enabled&&!stage_party_alive(fighters,first_enemy_slot))||(!stage->lockstep_actor_map_enabled&&fighters[0].dead)){
             if(!result_since)result_since=now;
             acc_us+=dt;input_t zero={0};int guard=0;
             while(acc_us>=sim_step_us&&guard++<4){
                 for(int i=0;i<total;i++)if(fighters[i].active)update_control(&fighters[i],&zero);
                 for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)update_object(world,&world->objects[i],fighters,total);
             object_apply_reflections(world);
-                update_hit_fx(world);stage_camera_update(&fighters[0],stage->phases[phase].bound);acc_us-=sim_step_us;
+                update_hit_fx(world);stage_camera_update(stage_party_focus(fighters,first_enemy_slot),stage->phases[phase].bound);acc_us-=sim_step_us;
             }
             draw_match(font,stage_bg,fighters,world,total-1,difficulty,cheat_enabled,false,&opt);
             if((dead_bodies_settled(fighters,total)&&now-result_since>650000ULL)||now-result_since>2200000ULL){result=LF2_MATCH_LOSS;break;}

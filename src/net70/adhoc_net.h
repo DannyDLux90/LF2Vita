@@ -7,7 +7,7 @@
 #define LF2_ADHOC_MAX_PLAYERS 8
 #define LF2_ADHOC_MAX_SESSIONS 12
 #define LF2_ADHOC_NAME_MAX 17
-#define LF2_ADHOC_PROTO_VERSION 3
+#define LF2_ADHOC_PROTO_VERSION 4
 #define LF2_GAME_VERSION "2.00a"
 #define LF2_VITA_VERSION "0.70"
 #define LF2_NET_VERSION_MAX 8
@@ -101,11 +101,13 @@ int lf2_adhoc_lobby_set_ready(bool ready);
 int lf2_adhoc_lobby_host_settings(const lf2_net_settings_t *settings);
 int lf2_adhoc_lobby_host_status(lf2_net_status_t status);
 
-/* Native Vita-to-Vita 30 Hz lockstep. Protocol v3 adds a post-load start
-   barrier and in-place retransmission so one delayed AdHoc packet no longer
-   stalls/disconnects an otherwise synchronized match. */
+/* Native Vita-to-Vita 30 Hz lockstep. Protocol v4 keeps one-TU input delay,
+   adds an 8-frame recovery window, reliable lobby refresh, soft DATA_TIMEOUT
+   handling and bounded retransmission. The first simulation TU is a neutral
+   post-load barrier, so both Vitas finish loading before gameplay advances. */
 int lf2_adhoc_match_begin(uint32_t match_id);
 bool lf2_adhoc_lockstep_frame(void *userdata, uint32_t local_held[4], uint32_t remote_held[4]);
+void lf2_adhoc_match_report_state(void *userdata, uint32_t tu, uint32_t digest);
 void lf2_adhoc_match_end(void);
 
 void lf2_adhoc_leave(void);

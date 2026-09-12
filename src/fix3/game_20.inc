@@ -61,6 +61,7 @@
     uint64_t last_us=sceKernelGetSystemTimeWide(),acc_us=0;
     lf2_logf("ANIM","fixed simulation rate=30Hz render_vblank=60Hz");
     uint64_t result_since=0;
+    uint32_t result_settle_tu=0;
     for(;;){
         SceCtrlData pad={0};sceCtrlPeekBufferPositive(0,&pad,1);
         uint32_t raw_pressed=pad.buttons&~prev;prev=pad.buttons;pending_pressed|=raw_pressed;
@@ -82,31 +83,57 @@
         if((!side_alive||!enemies_alive) && !(reference_mode && stock_tu<options->reference_tu_limit)){
             int outcome=(side_alive&&!enemies_alive)?LF2_MATCH_WIN:LF2_MATCH_LOSS;
             pending_pressed=0;
-            if(!result_since){result_since=now_us;lf2_logf("GAME","round over outcome=%d; settling KO physics",outcome);}
-            /* Keep the 30 Hz simulation alive after KO. No new attacks are
-               allowed, but bodies, projectiles and hit particles finish their
-               authored motion so a fighter never freezes in mid-air. */
+            if(!result_since){result_since=now_us;result_settle_tu=0;lf2_logf("GAME","round over outcome=%d; settling KO physics",outcome);}
+            /* Keep the 30 Hz simulation alive after KO. Native AdHoc must keep
+               this tail on the SAME deterministic clock as the fight itself;
+               otherwise each Vita used its own wall clock after the KO and
+               could leave the match at a different moment. */
+            bool native_result_lockstep=options->lockstep_native_vita_input&&options->lockstep_actor_map_enabled&&options->lockstep_frame;
             acc_us+=dt_us;int settle_guard=0;input_t zero={0};
             while(acc_us>=sim_step_us&&settle_guard++<4){
+                if(native_result_lockstep){
+                    uint32_t settle_local[4]={0,0,0,0},settle_remote[4]={0,0,0,0};
+                    if(!options->lockstep_frame(options->remote_userdata,settle_local,settle_remote)){
+                        lf2_log_stage("match:lockstep_disconnect","result_settle tu=%u",(unsigned)result_settle_tu);
+                        network_abort=true;result=LF2_MATCH_CANCEL;break;
+                    }
+                }
                 for(int i=0;i<total;i++)update_control(&fighters[i],&zero);
                 for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)update_object(world,&world->objects[i],fighters,total);
-            object_apply_reflections(world);
-                update_hit_fx(world);acc_us-=sim_step_us;
+                object_apply_reflections(world);
+                update_hit_fx(world);result_settle_tu++;
+                if(native_result_lockstep){
+                    stock_tu++;
+                    if(stock_tu==1||(stock_tu%30u)==0u){
+                        uint32_t digest=stock_state_digest(fighters,total,world,item_drop_timer);
+                        lf2_logf("NETSTATE","tu=%u digest=%08X settle=1",(unsigned)stock_tu,digest);
+                        if(options->lockstep_state)options->lockstep_state(options->remote_userdata,stock_tu,digest);
+                    }
+                }
+                acc_us-=sim_step_us;
             }
+            if(network_abort)break;
             if(options->auto_continue){
-                if(dead_bodies_settled(fighters,total)&&now_us-result_since>=650000ULL){result=outcome;break;}
-                if(now_us-result_since>=2200000ULL){result=outcome;break;}
+                if(native_result_lockstep){
+                    if((dead_bodies_settled(fighters,total)&&result_settle_tu>=20u)||result_settle_tu>=66u){result=outcome;break;}
+                }else{
+                    if(dead_bodies_settled(fighters,total)&&now_us-result_since>=650000ULL){result=outcome;break;}
+                    if(now_us-result_since>=2200000ULL){result=outcome;break;}
+                }
             } else if(options->allow_rematch){
                 if(raw_pressed&SCE_CTRL_CIRCLE){result=LF2_MATCH_CANCEL;break;}
                 if(raw_pressed&SCE_CTRL_CROSS){
                     lf2_logf("GAME","rematch cpus=%d",cpu_count);
-                    reset_match(fighters,cpu_count);world_clear_active(world);item_drop_timer=240+(lf2_rng_mod(180));last_us=sceKernelGetSystemTimeWide();acc_us=0;result_since=0;
+                    reset_match(fighters,cpu_count);world_clear_active(world);item_drop_timer=240+(lf2_rng_mod(180));last_us=sceKernelGetSystemTimeWide();acc_us=0;result_since=0;result_settle_tu=0;
                 }
             } else {
                 if(options->lockstep_actor_map_enabled){
-                    /* Stock peers must leave the result state on the same
-                       deterministic clock; never consume a Vita-only button. */
-                    if(now_us-result_since>=2200000ULL){result=outcome;break;}
+                    /* Native Vita peers settle on lockstep TUs; stock-PC keeps
+                       its existing result timer until the stock result-state
+                       protocol is implemented separately. */
+                    if(native_result_lockstep){
+                        if((dead_bodies_settled(fighters,total)&&result_settle_tu>=20u)||result_settle_tu>=66u){result=outcome;break;}
+                    }else if(now_us-result_since>=2200000ULL){result=outcome;break;}
                 }else{
                     if(raw_pressed&SCE_CTRL_CIRCLE){result=LF2_MATCH_CANCEL;break;}
                     if(raw_pressed&(SCE_CTRL_CROSS|SCE_CTRL_SQUARE)){result=outcome;break;}
@@ -114,7 +141,7 @@
             }
             draw_match(font,stage_bg,fighters,world,cpu_count,difficulty,cheat_enabled,false,options);continue;
         }
-        result_since=0;
+        result_since=0;result_settle_tu=0;
 
         if(reference_mode&&options->reference_fast_forward)acc_us+=sim_step_us*32u;
         else acc_us+=dt_us;
@@ -178,7 +205,7 @@
                     else if(i==options->remote_player_slot)remote_net_slot=0;
                     if(remote_net_slot>=0&&(options->lockstep_frame||options->remote_input)){
                         uint32_t held=options->lockstep_frame?lock_remote_held[remote_net_slot]:options->remote_input(options->remote_userdata);
-                        uint32_t pressed=held&~remote_prev[remote_net_slot];remote_prev[remote_net_slot]=held;
+                        uint32_t pressed=held&~remote_prev[remote_net_slot];remote_pre[remote_net_slot]=held;
                         input_t ri=options->lockstep_native_vita_input?make_native_remote_input(held,pressed):make_remote_input(held,pressed);
                         if(!handle_form_input(fighters,total,i,&ri)){fighter_handle_item_input(world,c,&ri);handle_catch_input(fighters,total,i,&ri);update_control(c,&ri);}process_frame_state(fighters,total,i,world);
                     }else{

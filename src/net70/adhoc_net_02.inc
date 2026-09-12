@@ -35,7 +35,13 @@ static void queue_event(int event,const SceNetInAddr *addr,const void *data,int 
     sceKernelUnlockLwMutex(&g_event_mutex,1);
 }
 
-static void matching_cb(int id,int event,SceNetInAddr *addr,SceSize opt_len,void *opt){(void)id;queue_event(event,addr,opt,(int)opt_len);}
+static void matching_cb(int id,int event,SceNetInAddr *addr,SceSize opt_len,void *opt){
+    (void)id;
+    /* Match input is latency critical. Cache it on the matching worker instead
+       of forcing the 30 Hz simulation to wait for the main-thread event queue. */
+    if(event==MATCH_DATA&&fast_match_input(addr,opt,(int)opt_len))return;
+    queue_event(event,addr,opt,(int)opt_len);
+}
 static bool pop_event(queued_event_t *out){bool ok=false;sceKernelLockLwMutex(&g_event_mutex,1,NULL);if(g_ev_head!=g_ev_tail){*out=g_events[g_ev_head];g_ev_head=(g_ev_head+1)%LF2_EVENT_QUEUE_CAP;ok=true;}sceKernelUnlockLwMutex(&g_event_mutex,1);return ok;}
 
 const char *lf2_net_mode_name(int m){static const char *n[]={"VS","Stage","Battle","1 vs 1","2 vs 2"};return (m>=0&&m<5)?n[m]:"?";}
@@ -68,5 +74,6 @@ static void adhoc_cleanup_runtime(void){
     if(g_mod_matching_loaded){sceSysmoduleUnloadModule(SCE_SYSMODULE_NET_ADHOC_MATCHING);g_mod_matching_loaded=false;}
     if(g_mod_adhoc_loaded){sceSysmoduleUnloadModule(SCE_SYSMODULE_PSPNET_ADHOC);g_mod_adhoc_loaded=false;}
     if(g_mod_net_loaded){sceSysmoduleUnloadModule(SCE_SYSMODULE_NET);g_mod_net_loaded=false;}
+    if(g_input_mutex_ready){sceKernelDeleteLwMutex(&g_input_mutex);g_input_mutex_ready=false;}
     if(g_mutex_ready){sceKernelDeleteLwMutex(&g_event_mutex);g_mutex_ready=false;}
 }

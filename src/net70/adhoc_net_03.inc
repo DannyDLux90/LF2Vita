@@ -3,6 +3,8 @@ int lf2_adhoc_init(void){
     g_error[0]=0;memset(&g_lobby,0,sizeof(g_lobby));g_ev_head=g_ev_tail=0;g_event_drops=0;g_event_peak=0;g_last_lobby_broadcast=0;g_last_player_refresh=0;
     int rc=sceKernelCreateLwMutex(&g_event_mutex,"lf2adhoc",0,0,NULL);
     if(rc<0){set_error("CreateLwMutex",rc);return rc;}g_mutex_ready=true;
+    rc=sceKernelCreateLwMutex(&g_input_mutex,"lf2input",0,0,NULL);
+    if(rc<0){set_error("CreateInputLwMutex",rc);goto fail;}g_input_mutex_ready=true;
 
     rc=sceSysmoduleLoadModule(SCE_SYSMODULE_NET);
     if(rc<0){set_error("load NET",rc);goto fail;}g_mod_net_loaded=true;
@@ -47,7 +49,7 @@ int lf2_adhoc_init(void){
     if(sceAppUtilSystemParamGetString(SCE_SYSTEM_PARAM_ID_USERNAME,(SceChar8*)g_name,sizeof(g_name))<0||!g_name[0])strcpy(g_name,"Vita Player");
     g_avatar_hash=local_avatar_hash();
     g_local_peer_id=fnv1a(g_name,strlen(g_name))^(uint32_t)now_us()^g_avatar_hash;if(!g_local_peer_id)g_local_peer_id=1;
-    g_local_character=0;g_local_ready=0;g_last_logged_revision=0;g_init=true;
+    g_local_character=0;g_local_partner=1;g_local_battle_follower=10;g_local_battle_count=2;g_local_ready=0;g_last_logged_revision=0;g_init=true;
     lf2_logf("NET","adhoc init user=%s avatar=%08X peer=%08X proto=%d",g_name,g_avatar_hash,g_local_peer_id,LF2_ADHOC_PROTO_VERSION);
     return 0;
 fail:

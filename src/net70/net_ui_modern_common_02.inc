@@ -1,5 +1,5 @@
 static int adhoc_create_game(bool cheat){
-    lf2_net_settings_t st={0};st.mode=LF2_NET_MODE_VS;st.max_players=2;st.status=LF2_NET_STATUS_WAITING;st.difficulty=LF2_DIFF_NORMAL;st.stage=0;st.allow_cheat=cheat?1:0;int sel=0;uint32_t prev=sync_buttons();
+    lf2_net_settings_t st={0};st.mode=LF2_NET_MODE_VS;st.max_players=2;st.status=LF2_NET_STATUS_WAITING;st.difficulty=LF2_DIFF_NORMAL;st.stage=0;st.allow_cheat=cheat?1:0;st.battle_follower=10;st.battle_count=2;int sel=0;uint32_t prev=sync_buttons();
     for(;;){
         SceCtrlData p={0};sceCtrlPeekBufferPositive(0,&p,1);uint32_t pr=p.buttons&~prev;prev=p.buttons;
         if(pr&SCE_CTRL_UP){sel=(sel+3)%4;ui_join();}
@@ -8,7 +8,7 @@ static int adhoc_create_game(bool cheat){
         if(pr&(SCE_CTRL_LEFT|SCE_CTRL_RIGHT)){
             int d=(pr&SCE_CTRL_RIGHT)?1:-1;
             if(sel==0)st.mode=(uint8_t)((st.mode+(d>0?1:4))%5);
-            else if(sel==1){int v=st.max_players+d;if(v<2)v=8;if(v>8)v=2;st.max_players=v;}
+            else if(sel==1){int v=(int)st.max_players+d;if(v<2)v=LF2_ADHOC_MAX_PLAYERS;if(v>LF2_ADHOC_MAX_PLAYERS)v=2;st.max_players=(uint8_t)v;}
             else if(sel==2){int v=st.stage+d;if(v<0)v=STAGE_COUNT-1;if(v>=STAGE_COUNT)v=0;st.stage=v;}
             else{int max=cheat?LF2_DIFF_CRAZY:LF2_DIFF_DIFFICULT;int v=(int)st.difficulty+d;if(v<0)v=max;if(v>max)v=0;st.difficulty=v;}
             ui_join();
@@ -21,7 +21,7 @@ static int adhoc_create_game(bool cheat){
         vita2d_draw_rectangle(0,0,960,80,RGBA8(20,27,39,255));
         net70_text(48,51,1.12f,RGBA8(252,253,255,255),"Neues AdHoc-Spiel");
         char hostline[96];snprintf(hostline,sizeof(hostline),"Host: %s",lf2_adhoc_local_name());net70_text(50,76,0.66f,RGBA8(177,196,219,255),hostline);
-        const char *lab[]={"Spielmodus","Max. Spieler","Stage","Schwierigkeit"};char v[4][64];snprintf(v[0],64,"%s",lf2_net_mode_name(st.mode));snprintf(v[1],64,"%d",st.max_players);snprintf(v[2],64,"%s",g_stages[st.stage].name);snprintf(v[3],64,"%s",ui_diff_name(st.difficulty));
+        const char *lab[]={"Spielmodus","Max. Spieler","Stage","Schwierigkeit"};char v[4][64];snprintf(v[0],64,"%s",lf2_net_mode_name(st.mode));snprintf(v[1],64,"%u Vitas",(unsigned)st.max_players);snprintf(v[2],64,"%s",g_stages[st.stage].name);snprintf(v[3],64,"%s",ui_diff_name(st.difficulty));
         for(int i=0;i<4;i++){float y=104+i*78;unsigned bg=sel==i?RGBA8(48,106,196,255):RGBA8(25,33,46,255);vita2d_draw_rectangle(72,y,816,66,bg);if(sel==i)net70_draw_outline(72,y,816,66,RGBA8(135,201,255,255));net70_text(100,y+41,0.78f,RGBA8(207,220,238,255),lab[i]);net70_text(520,y+42,0.90f,RGBA8(255,255,255,255),v[i]);net70_text(846,y+41,0.72f,RGBA8(191,213,240,255),"< >");}
         vita2d_draw_rectangle(72,430,816,66,RGBA8(19,25,35,255));
         net70_text(98,470,0.68f,RGBA8(224,234,247,255),"Hoch/Runter waehlen     Links/Rechts aendern");

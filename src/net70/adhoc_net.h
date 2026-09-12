@@ -7,7 +7,7 @@
 #define LF2_ADHOC_MAX_PLAYERS 8
 #define LF2_ADHOC_MAX_SESSIONS 12
 #define LF2_ADHOC_NAME_MAX 17
-#define LF2_ADHOC_PROTO_VERSION 4
+#define LF2_ADHOC_PROTO_VERSION 6
 #define LF2_GAME_VERSION "2.00a"
 #define LF2_VITA_VERSION "0.70"
 #define LF2_NET_VERSION_MAX 8
@@ -30,9 +30,13 @@ typedef enum {
 typedef struct {
     char name[LF2_ADHOC_NAME_MAX+1];
     uint8_t character;
+    uint8_t partner_character;
     uint8_t team;
     uint8_t ready;
     uint8_t present;
+    uint8_t battle_follower;
+    uint8_t battle_count;
+    uint8_t reserved_player;
     uint32_t avatar_hash;
     uint32_t peer_id;
     uint16_t ping_ms;
@@ -46,7 +50,9 @@ typedef struct {
     uint8_t stage;
     uint8_t friendly_fire;
     uint8_t allow_cheat;
-    uint8_t reserved;
+    uint8_t battle_follower;
+    uint8_t battle_count;
+    uint8_t reserved[3];
 } lf2_net_settings_t;
 
 typedef struct {
@@ -97,14 +103,18 @@ int lf2_adhoc_host_start(const lf2_net_settings_t *settings, int character);
 void lf2_adhoc_lobby_update(void);
 const lf2_adhoc_lobby_t *lf2_adhoc_lobby(void);
 int lf2_adhoc_lobby_set_character(int character);
+int lf2_adhoc_lobby_set_partner(int character);
+int lf2_adhoc_lobby_set_battle_follower(int character);
+int lf2_adhoc_lobby_set_battle_count(int count);
 int lf2_adhoc_lobby_set_ready(bool ready);
 int lf2_adhoc_lobby_host_settings(const lf2_net_settings_t *settings);
 int lf2_adhoc_lobby_host_status(lf2_net_status_t status);
 
-/* Native Vita-to-Vita 30 Hz lockstep. Protocol v4 keeps one-TU input delay,
-   adds an 8-frame recovery window, reliable lobby refresh, soft DATA_TIMEOUT
-   handling and bounded retransmission. The first simulation TU is a neutral
-   post-load barrier, so both Vitas finish loading before gameplay advances. */
+/* Native Vita-to-Vita 30 Hz lockstep. Protocol v6 keeps one-TU input delay
+   and the 8-frame recovery window, but routes match-input packets directly
+   from the matching callback into a mutex-protected lockstep cache. Lobby/UI
+   traffic still uses the event queue, so gameplay input cannot sit behind it.
+   The first simulation TU remains a neutral post-load barrier. */
 int lf2_adhoc_match_begin(uint32_t match_id);
 bool lf2_adhoc_lockstep_frame(void *userdata, uint32_t local_held[4], uint32_t remote_held[4]);
 void lf2_adhoc_match_report_state(void *userdata, uint32_t tu, uint32_t digest);

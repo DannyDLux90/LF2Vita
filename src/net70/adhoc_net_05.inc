@@ -48,13 +48,19 @@ int lf2_adhoc_lobby_host_settings(const lf2_net_settings_t *s){if(!g_host||!g_lo
 int lf2_adhoc_lobby_host_status(lf2_net_status_t st){if(!g_host)return -1;g_lobby.settings.status=(uint8_t)st;g_lobby.revision++;lf2_logf("NET","host status=%s rev=%u",lf2_net_status_name(st),g_lobby.revision);broadcast_lobby();return 0;}
 void lf2_adhoc_leave(void){lf2_log_stage("network:adhoc_leave","host=%d connected=%d",g_host?1:0,g_lobby.connected?1:0);lf2_adhoc_match_end();if(g_match>=0)clear_match();memset(&g_lobby,0,sizeof(g_lobby));g_host=false;g_browser=false;g_joining=false;g_local_ready=0;g_last_logged_revision=0;}
 
+static int native_active_guest_slot(void){for(int i=1;i<LF2_ADHOC_MAX_PLAYERS;i++)if(g_lobby.players[i].present)return i;return -1;}
 
 static bool native_match_peer_addr(SceNetInAddr *out){
     if(!out||g_match<0||!g_lobby.connected)return false;
     if(!g_host){if(!g_have_join_host)return false;*out=g_join_host_addr;return true;}
-    peer_t *only=NULL;
-    for(int i=0;i<LF2_ADHOC_MAX_PLAYERS;i++)if(g_peers[i].used){if(only)return false;only=&g_peers[i];}
-    if(!only)return false;*out=only->addr;return true;
+    int active_slot=native_active_guest_slot();if(active_slot<1)return false;
+    for(int i=0;i<LF2_ADHOC_MAX_PLAYERS;i++)if(g_peers[i].used&&g_peers[i].slot==active_slot){*out=g_peers[i].addr;return true;}
+    return false;
+}
+
+static bool native_event_is_active_peer(const queued_event_t *e){
+    if(!e||!g_native_have_peer)return false;
+    return e->addr.s_addr==g_native_peer_addr.s_addr;
 }
 
 static void native_match_deactivate(void){
@@ -68,9 +74,14 @@ static bool native_match_service_event(const queued_event_t *e){
     if(e->event==MATCH_DATA){process_packet(e);return true;}
     /* DATA_TIMEOUT describes one MatchingSendData attempt, not the peer
        connection. The lockstep packet has its own resend/deadline policy. */
-    if(e->event==MATCH_DATA_TIMEOUT){g_native_data_timeouts++;return true;}
+    if(e->event==MATCH_DATA_TIMEOUT){if(native_event_is_active_peer(e))g_native_data_timeouts++;return true;}
     if(e->event==MATCH_LEFT||e->event==MATCH_DISCONNECT||e->event==MATCH_TIMEOUT||e->event==MATCH_REJECT||e->event==MATCH_CANCEL||e->event==MATCH_ERROR){
-        g_lobby.connected=false;native_match_deactivate();
+        if(!native_event_is_active_peer(e)){
+            if(g_host)host_remove(e->addr.s_addr);
+            lf2_logf("NET","spectator peer event ignored during match event=%d addr=%08X",e->event,(unsigned)e->addr.s_addr);
+            return true;
+        }
+        if(!g_host)g_lobby.connected=false;native_match_deactivate();
         lf2_logf("NET","native match peer ended event=%d addr=%08X",e->event,(unsigned)e->addr.s_addr);
         return false;
     }

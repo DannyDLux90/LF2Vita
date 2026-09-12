@@ -71,6 +71,8 @@ static void net70_native_match_options(lf2_match_options_t *opt,const char *labe
     memset(opt,0,sizeof(*opt));opt->allow_rematch=false;opt->hud_label=label;opt->lockstep_actor_map_enabled=true;opt->lockstep_native_vita_input=true;
     if(host_actor>=0&&host_actor<=LF2_MAX_CPUS)opt->lockstep_actor_control[host_actor]=1;
     if(guest_actor>=0&&guest_actor<=LF2_MAX_CPUS)opt->lockstep_actor_control[guest_actor]=5;
+    const lf2_adhoc_lobby_t *l=lf2_adhoc_lobby();
+    if(l){opt->result_view_local=l->host?(host_actor>=0):(guest_actor>=0);opt->result_view_invert=opt->result_view_local&&!l->host&&host_actor==0&&guest_actor>0;}
     opt->lockstep_frame=lf2_adhoc_lockstep_frame;opt->lockstep_state=lf2_adhoc_match_report_state;opt->remote_userdata=NULL;
 }
 

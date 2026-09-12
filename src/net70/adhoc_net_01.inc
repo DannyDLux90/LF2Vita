@@ -106,8 +106,12 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     packet_hdr_t h;
     uint32_t match_id;
+    /* newest input is scheduled one simulation tick ahead; the previous
+       scheduled frame is repeated in the same packet for loss recovery. */
     uint32_t frame;
     uint32_t held;
+    uint32_t prev_frame;
+    uint32_t prev_held;
 } match_input_packet_t;
 
 typedef struct {
@@ -177,6 +181,11 @@ static uint32_t g_last_logged_revision;
 static bool g_native_match_active;
 static uint32_t g_native_match_id;
 static uint32_t g_native_match_frame;
+static uint32_t g_native_prev_physical;
+static uint64_t g_native_wait_total_us;
+static uint64_t g_native_wait_max_us;
+static uint32_t g_native_wait_samples;
+static uint32_t g_native_buffer_hits;
 static match_input_cache_t g_match_inputs[16];
 static bool g_mutex_ready;
 static bool g_mod_net_loaded,g_mod_adhoc_loaded,g_mod_matching_loaded;

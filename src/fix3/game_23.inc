@@ -28,8 +28,9 @@ int lf2_run_stage_section(vita2d_pgf *font, vita2d_texture *stage_bg,
     int ally_count=stage->ally_count;if(ally_count<0)ally_count=0;if(ally_count>LF2_STAGE_MAX_ALLIES)ally_count=LF2_STAGE_MAX_ALLIES;
     int first_enemy_slot=1+ally_count;
     int last_enemy_slot=first_enemy_slot+LF2_STAGE_ENEMY_SLOTS-1;
-    total=last_enemy_slot+1;
-    if(total>LF2_MAX_ACTORS)total=LF2_MAX_ACTORS;
+    /* Always allocate the dedicated dynamic pool as well. Those slots are
+       simulated and drawn, but deliberately excluded from phase completion. */
+    total=LF2_MAX_ACTORS;
     fighter_t *fighters=(fighter_t*)calloc((size_t)total,sizeof(*fighters));
     object_world_t *world=(object_world_t*)calloc(1,sizeof(*world));
     if(!fighters||!world){free(fighters);free(world);g_world_min_x=old_min;g_world_max_x=old_max;g_camera_x=old_cam;return -2;}

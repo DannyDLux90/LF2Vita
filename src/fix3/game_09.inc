@@ -88,8 +88,19 @@ static void spawn_fighter_opoints(object_world_t *w,fighter_t *fighters,int tota
         int clone_roster=clone_roster_for_oid(op->oid);
         if(clone_roster>=0){
             for(int n=0;n<count;n++){
-                int slot=-1;for(int k=1;k<total;k++)if(!fighters[k].active){slot=k;break;}
-                if(slot<0){lf2_logf("CLONE","%s clone oid=%d skipped: no free fighter slot",f->def.name,op->oid);break;}
+                int slot=-1;
+                if(total>LF2_MAX_CPUS+1){
+                    /* Stage Mode owns 0..14 for P1/allies/wave enemies. Keep
+                       clones in the dedicated dynamic pool so stage_phase_settled()
+                       only tracks authored enemies and can always advance. */
+                    for(int k=LF2_STAGE_DYNAMIC_FIRST;k<total;k++){
+                        if(!fighters[k].active||(fighters[k].clone&&fighters[k].dead)){slot=k;break;}
+                    }
+                    if(slot>=0&&fighters[slot].active)unload_fighter_slot(&fighters[slot]);
+                }else{
+                    for(int k=1;k<total;k++)if(!fighters[k].active){slot=k;break;}
+                }
+                if(slot<0){lf2_logf("CLONE","%s clone oid=%d skipped: no free dynamic fighter slot",f->def.name,op->oid);break;}
                 float side=f->facing?-1.0f:1.0f;float x=clampf(f->x+side*(42.0f+24.0f*n),g_world_min_x,g_world_max_x);
                 float z=clampf(f->z+(n?18.0f:-18.0f),-70.0f,75.0f);
                 if(load_fighter(&fighters[slot],clone_roster,true,f->team,x,z,f->facing,slot,10)==0){

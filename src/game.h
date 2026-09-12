@@ -12,7 +12,12 @@
    simultaneously active Stage enemies. */
 #define LF2_STAGE_MAX_ALLIES 7
 #define LF2_STAGE_ENEMY_SLOTS 7
-#define LF2_MAX_ACTORS (1 + LF2_STAGE_MAX_ALLIES + LF2_STAGE_ENEMY_SLOTS)
+/* Stage Mode needs actor slots that are never part of wave completion. Rudolf
+   clones (and future summoned fighters) must not occupy the enemy queue slots,
+   otherwise an allied clone can permanently block stage progression. */
+#define LF2_STAGE_DYNAMIC_SLOTS 8
+#define LF2_STAGE_DYNAMIC_FIRST (1 + LF2_STAGE_MAX_ALLIES + LF2_STAGE_ENEMY_SLOTS)
+#define LF2_MAX_ACTORS (LF2_STAGE_DYNAMIC_FIRST + LF2_STAGE_DYNAMIC_SLOTS)
 
 enum {
     LF2_DIFF_EASY=0,

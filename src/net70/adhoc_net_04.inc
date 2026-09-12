@@ -10,10 +10,15 @@ static void host_complete(const queued_event_t *e){pending_t *p=pending_find(e->
 
 static void host_remove(uint32_t a){peer_t *peer=peer_find(a);if(peer){int slot=peer->slot;memset(peer,0,sizeof(*peer));if(slot>0&&slot<LF2_ADHOC_MAX_PLAYERS)memset(&g_lobby.players[slot],0,sizeof(g_lobby.players[slot]));g_lobby.revision++;broadcast_lobby();}}
 
+static void cache_match_input_one(uint32_t match_id,uint32_t frame,uint32_t held){
+    match_input_cache_t *c=&g_match_inputs[frame%(sizeof(g_match_inputs)/sizeof(g_match_inputs[0]))];
+    c->valid=true;c->match_id=match_id;c->frame=frame;c->held=held;
+}
+
 static void cache_match_input(const match_input_packet_t *p){
     if(!p)return;
-    match_input_cache_t *c=&g_match_inputs[p->frame%(sizeof(g_match_inputs)/sizeof(g_match_inputs[0]))];
-    c->valid=true;c->match_id=p->match_id;c->frame=p->frame;c->held=p->held;
+    cache_match_input_one(p->match_id,p->frame,p->held);
+    if(p->prev_frame!=0xffffffffu)cache_match_input_one(p->match_id,p->prev_frame,p->prev_held);
 }
 
 static bool take_match_input(uint32_t match_id,uint32_t frame,uint32_t *held){

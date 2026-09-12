@@ -12,7 +12,7 @@
 
             for(int i=0;i<total;i++)fighters[i].direct_hurt_latched=false;
             int oldhp[LF2_MAX_CPUS+1];for(int i=0;i<total;i++)oldhp[i]=fighters[i].hp;
-            bool stock_compat=options->lockstep_actor_map_enabled;
+            bool stock_compat=options->lockstep_actor_map_enabled&&!options->lockstep_native_vita_input;
             g_runtime_stock_compat=stock_compat;
             for(int a=0;a<total;a++)for(int b=0;b<total;b++)if(a!=b)apply_hits(world,fighters,total,a,b,difficulty);
             for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)object_apply_hits(world,&world->objects[i],fighters,total,difficulty);
@@ -39,6 +39,12 @@
                              (unsigned)stock_tu,result,ref_side_alive,ref_enemies_alive,(unsigned)lf2_rng_calls());
                     reference_done=true;
                 }
+            }else if(options->lockstep_native_vita_input){
+                stock_tu++;
+                if(stock_tu==1||(stock_tu%30u)==0u){
+                    uint32_t digest=stock_state_digest(fighters,total,world,item_drop_timer);
+                    lf2_logf("NETSTATE","tu=%u digest=%08X",(unsigned)stock_tu,digest);
+                }
             }
             acc_us-=sim_step_us;
             if(reference_done)break;
@@ -57,7 +63,7 @@
             .mp_used=fighters[i].stat_mp_used,.picking=fighters[i].stat_picking,.dead=fighters[i].dead?1:0};
     }
     lf2_log_stage("match:cleanup","result=%d cpus=%d p1_hp=%d p1_mp=%d",result,cpu_count,fighters[0].hp,fighters[0].mp);
-    if(options->lockstep_actor_map_enabled){
+    if(options->lockstep_actor_map_enabled&&!options->lockstep_native_vita_input){
         for(int i=0;i<loaded;i++)lf2_logf("STOCKSTAT","actor=%d char=%s team=%d hp=%d attack=%d hp_lost=%d kills=%d mp_used=%d picking=%d",
             i,fighters[i].def.name,fighters[i].team,fighters[i].hp,fighters[i].stat_attack,fighters[i].stat_hp_lost,
             fighters[i].stat_kills,fighters[i].stat_mp_used,fighters[i].stat_picking);

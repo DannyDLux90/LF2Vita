@@ -39,7 +39,8 @@ enum {
     LF2_REMOTE_DEFEND         = 1u << 6,
     LF2_REMOTE_PICKUP         = 1u << 7,
     LF2_REMOTE_SPECIAL_ATTACK = 1u << 8,
-    LF2_REMOTE_SPECIAL_JUMP   = 1u << 9
+    LF2_REMOTE_SPECIAL_JUMP   = 1u << 9,
+    LF2_REMOTE_RUN            = 1u << 10
 };
 
 typedef uint32_t (*lf2_remote_input_fn)(void *userdata);
@@ -110,6 +111,11 @@ typedef struct {
        0 leaves that actor under AI control.  This preserves stock actor order
        even when the Vita is the connecting (slots 5..8) machine. */
     bool lockstep_actor_map_enabled;
+    /* Native Vita-to-Vita lockstep carries the complete Vita action set
+       (run, pickup and shortcut specials) instead of the retail PC byte.
+       This also keeps the match on the normal Vita gameplay rules while the
+       separate PC/reference paths continue to opt into stock compatibility. */
+    bool lockstep_native_vita_input;
     uint8_t lockstep_actor_control[LF2_MAX_CPUS+1];
     lf2_remote_input_fn remote_input;
     lf2_remote_alive_fn remote_alive;

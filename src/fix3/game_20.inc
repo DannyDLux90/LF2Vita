@@ -22,7 +22,8 @@
             uint8_t ctl=options->lockstep_actor_control[ai];
             if(ctl>=1&&ctl<=8){
                 fighters[ai].ai=false;fighters[ai].human_no=(int)ctl;
-                lf2_log_stage("match:stock_control","actor=%d control=%u fighter=%s team=%d",ai,(unsigned)ctl,fighters[ai].def.name,fighters[ai].team);
+                lf2_log_stage(options->lockstep_native_vita_input?"match:vita_control":"match:stock_control",
+                              "actor=%d control=%u fighter=%s team=%d",ai,(unsigned)ctl,fighters[ai].def.name,fighters[ai].team);
             }
         }
     }
@@ -133,11 +134,15 @@
             uint32_t lock_remote_held[4]={0,0,0,0};
             bool use_lockstep=options->lockstep_frame&&(options->lockstep_actor_map_enabled||options->remote_player_slot>0||options->remote_player_count>0);
             if(use_lockstep){
-                strip_vita_only_shortcuts(&in);
-                /* A Vita exposes one physical controller. It always feeds the
-                   first stock control slot owned by this machine; the actor map
-                   decides whether that is global player 1 or player 5. */
-                lock_local_held[0]=basic_remote_mask_from_input(&in);
+                if(options->lockstep_native_vita_input){
+                    /* Native Vita AdHoc carries the complete local action set.
+                       Do not strip Triangle/R/L or analog-run here. */
+                    lock_local_held[0]=native_remote_mask_from_input(&in);
+                }else{
+                    strip_vita_only_shortcuts(&in);
+                    /* Retail LF2 PC packets carry only the stock 8-bit keys. */
+                    lock_local_held[0]=basic_remote_mask_from_input(&in);
+                }
                 if(!options->lockstep_frame(options->remote_userdata,lock_local_held,lock_remote_held)){
                     lf2_log_stage("match:lockstep_disconnect","slot=%d remotes=%d map=%d",options->remote_player_slot,options->remote_player_count,options->lockstep_actor_map_enabled?1:0);
                     network_abort=true;result=LF2_MATCH_CANCEL;break;
@@ -152,7 +157,7 @@
                     if(ctl>=1&&ctl<=8){
                         uint32_t held=(ctl<=4)?lock_local_held[ctl-1]:lock_remote_held[ctl-5];
                         int pi=(int)ctl-1;uint32_t pressed=held&~lock_actor_prev[pi];lock_actor_prev[pi]=held;
-                        input_t ri=make_remote_input(held,pressed);
+                        input_t ri=options->lockstep_native_vita_input?make_native_remote_input(held,pressed):make_remote_input(held,pressed);
                         if(!handle_form_input(fighters,total,i,&ri)){fighter_handle_item_input(world,c,&ri);handle_catch_input(fighters,total,i,&ri);update_control(c,&ri);}process_frame_state(fighters,total,i,world);
                     }else{
                         fighter_t *target=nearest_living_enemy(c,fighters,total);
@@ -164,7 +169,7 @@
             }else{
                 if(use_lockstep){
                     uint32_t lp=lock_local_held[0]&~lock_local_prev[0];lock_local_prev[0]=lock_local_held[0];
-                    in=make_remote_input(lock_local_held[0],lp);
+                    in=options->lockstep_native_vita_input?make_native_remote_input(lock_local_held[0],lp):make_remote_input(lock_local_held[0],lp);
                 }
                 pending_pressed=0;if(!handle_form_input(fighters,total,0,&in)){fighter_handle_item_input(world,p,&in);handle_catch_input(fighters,total,0,&in);update_control(p,&in);}process_frame_state(fighters,total,0,world);
                 for(int i=1;i<total;i++){
@@ -174,7 +179,7 @@
                     if(remote_net_slot>=0&&(options->lockstep_frame||options->remote_input)){
                         uint32_t held=options->lockstep_frame?lock_remote_held[remote_net_slot]:options->remote_input(options->remote_userdata);
                         uint32_t pressed=held&~remote_prev[remote_net_slot];remote_prev[remote_net_slot]=held;
-                        input_t ri=make_remote_input(held,pressed);
+                        input_t ri=options->lockstep_native_vita_input?make_native_remote_input(held,pressed):make_remote_input(held,pressed);
                         if(!handle_form_input(fighters,total,i,&ri)){fighter_handle_item_input(world,c,&ri);handle_catch_input(fighters,total,i,&ri);update_control(c,&ri);}process_frame_state(fighters,total,i,world);
                     }else{
                         fighter_t *target=nearest_living_enemy(c,fighters,total);

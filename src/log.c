@@ -15,6 +15,7 @@
 #define STATE_FILE LOG_DIR "/last_state.txt"
 static SceUID g_log=-1;
 static char g_last_stage[128]="boot";
+static unsigned long long g_last_sync_ms;
 
 static void write_all(SceUID fd,const char *s,int n){
     while(n>0){int w=sceIoWrite(fd,s,n);if(w<=0)break;s+=w;n-=w;}
@@ -29,6 +30,10 @@ void lf2_logf(const char *level,const char *fmt,...){
     char body[1400],line[1536];va_list ap;va_start(ap,fmt);vsnprintf(body,sizeof(body),fmt,ap);va_end(ap);
     int n=snprintf(line,sizeof(line),"[%010llu ms] %-5s %s\n",ms_now(),level?level:"INFO",body);
     if(n>0)write_all(g_log,line,n<(int)sizeof(line)?n:(int)sizeof(line)-1);
+    /* Keep diagnostics recoverable even if a Vita is hard-exited during a
+       network match, without forcing a filesystem sync for every ANIM line. */
+    unsigned long long now=ms_now();
+    if(now-g_last_sync_ms>=250ULL){sync_log();g_last_sync_ms=now;}
 }
 
 void lf2_log_memory(const char *tag){
@@ -69,6 +74,7 @@ void lf2_log_init(void){
     sceIoRemove(LOG_PREV_FILE);
     sceIoRename(LOG_FILE,LOG_PREV_FILE);
     g_log=sceIoOpen(LOG_FILE,SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
+    g_last_sync_ms=ms_now();
     lf2_logf("INFO","============================================================");
     lf2_logf("INFO","Little Fighter 2 Vita 0.69 fix3 session start");
     lf2_logf("INFO","build=0.69-fix3 log_policy=current_session prev=%s",LOG_PREV_FILE);

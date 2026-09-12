@@ -74,7 +74,7 @@ bool lf2_adhoc_lockstep_frame(void *userdata,uint32_t local_held[4],uint32_t rem
     if(g_host){local_held[0]=physical_local;remote_held[0]=peer_held;}
     else {local_held[0]=peer_held;remote_held[0]=physical_local;}
     g_native_match_frame++;
-    if(frame==0||(frame%300u)==0u)lf2_logf("NET","native lockstep id=%u frame=%u hostmask=%02X clientmask=%02X",(unsigned)g_native_match_id,(unsigned)frame,(unsigned)(local_held[0]&0xffu),(unsigned)(remote_held[0]&0xffu));
+    if(frame==0||(frame%300u)==0u)lf2_logf("NET","native lockstep id=%u frame=%u hostmask=%08X clientmask=%08X",(unsigned)g_native_match_id,(unsigned)frame,(unsigned)local_held[0],(unsigned)remote_held[0]);
     return true;
 }
 

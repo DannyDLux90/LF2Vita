@@ -39,3 +39,46 @@ static input_t make_remote_input(uint32_t held,uint32_t pressed){
     in.attack_pressed=(pressed&0x08u)!=0;
     return in;
 }
+
+
+/* Native Vita lockstep uses the platform-neutral mask from game.h. Unlike the
+   retail 22-byte PC packet, this path must preserve every Vita gameplay
+   action so local multiplayer behaves like an offline Vita match. */
+static uint32_t native_remote_mask_from_input(const input_t *in){
+    uint32_t m=0;
+    if(!in)return 0;
+    if(in->left)m|=LF2_REMOTE_LEFT;
+    if(in->right)m|=LF2_REMOTE_RIGHT;
+    if(in->up)m|=LF2_REMOTE_UP;
+    if(in->down)m|=LF2_REMOTE_DOWN;
+    if(in->attack)m|=LF2_REMOTE_ATTACK;
+    if(in->jump)m|=LF2_REMOTE_JUMP;
+    if(in->defend)m|=LF2_REMOTE_DEFEND;
+    if(in->pickup)m|=LF2_REMOTE_PICKUP;
+    if(in->special_attack)m|=LF2_REMOTE_SPECIAL_ATTACK;
+    if(in->special_jump)m|=LF2_REMOTE_SPECIAL_JUMP;
+    if(in->run)m|=LF2_REMOTE_RUN;
+    return m;
+}
+
+static input_t make_native_remote_input(uint32_t held,uint32_t pressed){
+    input_t in={0};
+    in.left=(held&LF2_REMOTE_LEFT)!=0;
+    in.right=(held&LF2_REMOTE_RIGHT)!=0;
+    in.up=(held&LF2_REMOTE_UP)!=0;
+    in.down=(held&LF2_REMOTE_DOWN)!=0;
+    in.attack=(held&LF2_REMOTE_ATTACK)!=0;
+    in.jump=(held&LF2_REMOTE_JUMP)!=0;
+    in.defend=(held&LF2_REMOTE_DEFEND)!=0;
+    in.pickup=(held&LF2_REMOTE_PICKUP)!=0;
+    in.special_attack=(held&LF2_REMOTE_SPECIAL_ATTACK)!=0;
+    in.special_jump=(held&LF2_REMOTE_SPECIAL_JUMP)!=0;
+    in.run=(held&LF2_REMOTE_RUN)!=0;
+    in.attack_pressed=(pressed&LF2_REMOTE_ATTACK)!=0;
+    in.jump_pressed=(pressed&LF2_REMOTE_JUMP)!=0;
+    in.defend_pressed=(pressed&LF2_REMOTE_DEFEND)!=0;
+    in.pickup_pressed=(pressed&LF2_REMOTE_PICKUP)!=0;
+    in.special_attack_pressed=(pressed&LF2_REMOTE_SPECIAL_ATTACK)!=0;
+    in.special_jump_pressed=(pressed&LF2_REMOTE_SPECIAL_JUMP)!=0;
+    return in;
+}

@@ -65,6 +65,7 @@ static int net70_run_adhoc_vs_match(uint32_t match_id){
     opt.allow_rematch=false;
     opt.hud_label="AdHoc VS";
     opt.lockstep_actor_map_enabled=true;
+    opt.lockstep_native_vita_input=true;
     opt.lockstep_actor_control[0]=1; /* host input */
     opt.lockstep_actor_control[1]=5; /* joining Vita input */
     opt.lockstep_frame=lf2_adhoc_lockstep_frame;

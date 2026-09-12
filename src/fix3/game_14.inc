@@ -51,6 +51,7 @@
 }
 
 static void apply_hits(object_world_t *world,fighter_t *fighters,int total,int aidx,int bidx,int difficulty) {
+    if(!fighters||aidx<0||bidx<0||aidx>=total||bidx>=total||aidx==bidx)return;
     fighter_t *a=&fighters[aidx],*b=&fighters[bidx];
     if (a->dead || b->dead) return;
     lf2_frame_def_t *af=frame_def(a), *bf=frame_def(b);

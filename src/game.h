@@ -122,6 +122,11 @@ typedef struct {
        This also keeps the match on the normal Vita gameplay rules while the
        separate PC/reference paths continue to opt into stock compatibility. */
     bool lockstep_native_vita_input;
+    /* Native network simulation always returns the canonical actor-0 result.
+       These display-only flags let each Vita present that result from its own
+       participant perspective without changing deterministic mode logic. */
+    bool result_view_local;
+    bool result_view_invert;
     uint8_t lockstep_actor_control[LF2_MAX_CPUS+1];
     lf2_remote_input_fn remote_input;
     lf2_remote_alive_fn remote_alive;

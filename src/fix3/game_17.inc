@@ -65,7 +65,10 @@ static void draw_match(vita2d_pgf *font,vita2d_texture *bg,fighter_t *fighters,o
         if(cheat)lf2_ui_draw_text(760,122,0.55f,RGBA8(255,225,80,255),"LF2.NET / CRAZY");
     }
     if((!options||!options->suppress_result_overlay) && (!player_side_alive(fighters,total)||!player_has_enemy(fighters,total))){
-        vita2d_draw_rectangle(235,185,490,135,RGBA8(0,0,0,205));const char *msg=player_side_won(fighters,total)?"K.O. - Spieler 1 gewinnt":"K.O. - Spieler 1 ist besiegt";
+        vita2d_draw_rectangle(235,185,490,135,RGBA8(0,0,0,205));
+        bool view_won=player_side_won(fighters,total);const char *msg=NULL;
+        if(options&&options->result_view_local){if(options->result_view_invert)view_won=!view_won;msg=view_won?"K.O. - Sieg":"K.O. - Niederlage";}
+        else msg=view_won?"K.O. - Spieler 1 gewinnt":"K.O. - Spieler 1 ist besiegt";
         if(lf2_ui_font_ready()){float tw=lf2_ui_text_width(0.92f,msg);lf2_ui_draw_text(480.0f-tw*0.5f,216,0.92f,RGBA8(255,255,255,255),msg);if(options&&options->auto_continue)lf2_ui_draw_text(337,268,0.72f,RGBA8(235,242,255,255),"Weiter...");else if(options&&!options->allow_rematch)lf2_ui_draw_text(280,268,0.72f,RGBA8(235,242,255,255),"X: Continue     Circle: Menu");else lf2_ui_draw_text(302,268,0.72f,RGBA8(235,242,255,255),"X: Rematch     Circle: Menu");}
     }else if(paused){vita2d_draw_rectangle(285,190,390,120,RGBA8(0,0,0,215));if(lf2_ui_font_ready()){lf2_ui_draw_text(418,216,1.0f,RGBA8(255,255,255,255),"PAUSE");lf2_ui_draw_text(330,264,0.72f,RGBA8(235,242,255,255),"START: Resume   Circle: Menu");}}
     vita2d_end_drawing();vita2d_swap_buffers();

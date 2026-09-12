@@ -20,13 +20,15 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Keep symbols and frame pointers in the developer ELF. The packaged SELF stays compact,
 # while future Vita crash dumps can be resolved against the matching debug ELF.
 add_compile_options(-O2 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -Wall -Wextra -Wno-unused-parameter -Wno-misleading-indentation -ffunction-sections -fdata-sections)
-add_link_options(-Wl,--gc-sections)
+add_compile_options(-flto)
+add_link_options(-flto -Wl,--gc-sections)
 
 # Request the Vita extended-memory application profile.
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
 
 # Keep the menu/network shell compact enough for Vita ELF metadata headroom.
-set_source_files_properties(src/main.c src/game.c src/net70/pc_net.c src/replay_ref.c PROPERTIES COMPILE_OPTIONS "-Os")
+set_source_files_properties(src/main.c PROPERTIES COMPILE_OPTIONS "-Oz")
+set_source_files_properties(src/game.c src/net70/pc_net.c src/replay_ref.c PROPERTIES COMPILE_OPTIONS "-Os")
 
 add_executable(lf2vita
   src/main.c

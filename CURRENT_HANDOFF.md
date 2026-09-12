@@ -65,13 +65,13 @@ All five lobby modes route through the native Vita path for the active host/gues
 - Original LF2 2.00a PC interoperability remains a separate TCP/12345 path with stock 8-bit controls and stock-simulation compatibility work.
 
 ## Current checkpoint
-- `pc-compat-v6-integration` head `e2304c4c7b33a1536122ddb9aa4194776d9042be` contains AdHoc v6, Championship flows, 8-slot lobby selection and spectator-safe active-peer selection.
-- Fast-forward `pc-compat-wip` to that exact commit and require official VitaSDK CI success before calling it verified.
-- After CI, continue optimization/mode fidelity work without requiring an immediate user hardware test.
+- Integration head before official CI: `59582d249386b82c75306f9c025281fca4b61ffa`.
+- It contains AdHoc v6, Championship flows, 8-slot lobby selection and spectator-safe active-peer selection.
+- Fast-forward `pc-compat-wip` to this exact commit and require official VitaSDK CI success before calling it verified.
 
 ## Next action after a chat restart
 1. Read this file and `PC_COMPAT_WIP.md`.
 2. Confirm `pc-compat-wip` head, `main` head, and latest CI run.
-3. If the v6 integration commit has been moved to `pc-compat-wip`, wait for/inspect CI including `Test native AdHoc protocol`, ELF/SELF build and artifact packaging.
+3. If `pc-compat-wip` points at `59582d249386b82c75306f9c025281fca4b61ffa`, inspect the official CI including `Test native AdHoc protocol`, ELF/SELF build and artifact packaging.
 4. If CI is green, preserve that checkpoint and continue network-mode fidelity or multi-peer work without requiring an intermediate user hardware test.
 5. Only when a larger consolidated block is ready, package the exact CI `eboot.bin` into the separate VPK, verify hashes, and provide Source+Workspace ZIP plus VPK.

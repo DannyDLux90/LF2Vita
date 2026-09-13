@@ -1,5 +1,6 @@
 #include "game.h"
 #include "audio.h"
+#include "background.h"
 #include "lf2_data.h"
 #include "lf2_core.h"
 #include "lf2_rng.h"

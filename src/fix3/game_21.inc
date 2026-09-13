@@ -18,6 +18,7 @@
             for(int a=0;a<total;a++)fighter_apply_hits_to_items(world,fighters,total,a);
             for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active){object_apply_hits(world,&world->objects[i],fighters,total,difficulty);object_apply_hits_to_items(world,&world->objects[i]);}
             update_hit_fx(world);
+            lf2_background_tick();
             for(int i=0;i<total;i++)if(fighters[i].hp!=oldhp[i]){
                 if(i==0)lf2_logf("HIT","P1 %s hp %d -> %d",fighters[i].def.name,oldhp[i],fighters[i].hp);
                 else if(fighters[i].human_no==2)lf2_logf("HIT","P2 %s hp %d -> %d",fighters[i].def.name,oldhp[i],fighters[i].hp);

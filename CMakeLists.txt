@@ -28,12 +28,13 @@ set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
 
 # Keep the menu/network shell compact enough for Vita ELF metadata headroom.
 set_source_files_properties(src/main.c PROPERTIES COMPILE_OPTIONS "-Oz")
-set_source_files_properties(src/game.c src/net70/pc_net.c src/replay_ref.c PROPERTIES COMPILE_OPTIONS "-Os")
+set_source_files_properties(src/game.c src/background.c src/net70/pc_net.c src/replay_ref.c PROPERTIES COMPILE_OPTIONS "-Os")
 
 add_executable(lf2vita
   src/main.c
   src/filecheck.c
   src/asset_pack.c
+  src/background.c
   src/audio.c
   src/log.c
   src/ui_font.c

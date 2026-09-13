@@ -97,15 +97,15 @@ static void object_apply_hits(object_world_t *w,world_object_t *o,fighter_t *fig
 }
 /* Stock weapon victims are real objects with bdy regions. Heavy weapons on
    the ground can be punched; light/throw/drink objects on the ground are only
-   attackable by another held weapon. Airborne loose weapons may be intercepted. */
-static int item_accepts_attack(const world_object_t *target,const lf2_itr_def_t *it,int attacker_is_held_weapon){
+   attackable by another weapon (held or thrown). Airborne loose weapons may be intercepted. */
+static int item_accepts_attack(const world_object_t *target,const lf2_itr_def_t *it,int attacker_is_weapon){
     if(!target||!target->active||!target->cache||!it||target->attached||(!target->pickup_item&&!target->recoverable_weapon))return 0;
     lf2_frame_def_t *tf=object_frame_def((world_object_t*)target);if(!tf||tf->bdy_count<=0)return 0;
     if(target->type==2){
         if(target->grounded||tf->state==2004)return 1;
         return tf->state==2000&&it->fall>=60;
     }
-    if(target->grounded)return attacker_is_held_weapon;
+    if(target->grounded)return attacker_is_weapon;
     return 1;
 }
 
@@ -135,8 +135,12 @@ static void object_apply_hits_to_items(object_world_t *w,world_object_t *attacke
     for(int ii=0;ii<af->itr_count;ii++){
         lf2_itr_def_t *it=&af->itrs[ii];if(it->kind!=0&&it->kind!=5&&it->kind!=9)continue;
         int ax,ay;object_region_world(attacker,it->x,it->y,it->w,it->h,&ax,&ay);
+        /* PC LF2 lets a light/heavy/drink weapon strike a light weapon that
+           is already on the ground. The previous Vita path passed 0 for every
+           object attacker, so thrown weapons incorrectly lost that ability. */
+        int attacker_is_weapon=(attacker->type==1||attacker->type==2||attacker->type==6);
         for(int oi=0;oi<LF2_MAX_ACTIVE_OBJECTS;oi++){
-            world_object_t *target=&w->objects[oi];if(target==attacker||!item_accepts_attack(target,it,0))continue;
+            world_object_t *target=&w->objects[oi];if(target==attacker||!item_accepts_attack(target,it,attacker_is_weapon))continue;
             if(!item_itr_overlaps(target,it,ax,ay,attacker->z))continue;
             if(item_damage_object(target,it->injury,it->bdefend,"object attack"))return;
             item_react_to_hit(target,it,attacker->facing);

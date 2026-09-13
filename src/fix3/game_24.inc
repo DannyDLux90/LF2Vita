@@ -38,6 +38,7 @@
             for(int a=0;a<total;a++)if(fighters[a].active)fighter_apply_hits_to_items(world,fighters,total,a);
             for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active){object_apply_hits(world,&world->objects[i],fighters,total,difficulty);object_apply_hits_to_items(world,&world->objects[i]);}
             update_hit_fx(world);
+            lf2_background_tick();
             for(int i=0;i<total;i++)if(fighters[i].active&&fighters[i].hp!=oldhp[i])
                 lf2_logf("HIT","Stage slot=%d %s hp %d -> %d",i,fighters[i].def.name,oldhp[i],fighters[i].hp);
             if(stage->lockstep_actor_map_enabled&&stage->lockstep_native_vita_input){network_tu++;if(network_tu==1||(network_tu%30u)==0u){uint32_t dg=stock_state_digest(fighters,total,world,0);lf2_logf("NETSTATE","stage_tu=%u digest=%08X",(unsigned)network_tu,dg);if(stage->lockstep_state)stage->lockstep_state(stage->remote_userdata,network_tu,dg);}}

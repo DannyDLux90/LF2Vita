@@ -7,22 +7,14 @@
 }
 
 static void draw_world_background(vita2d_texture *bg){
+    /* Prefer the original encrypted bg.dat + BMP layers from game.lf2pak.
+       The packaged PNG remains only as a safety fallback for malformed or
+       missing user data. */
+    if(lf2_background_draw(g_camera_x))return;
     if(!bg)return;
     float tw=(float)vita2d_texture_get_width(bg),th=(float)vita2d_texture_get_height(bg);
     if(tw<=0||th<=0)return;
-    float sx=960.0f/tw,sy=544.0f/th;
-    if(g_camera_x<=0.01f){
-        vita2d_draw_texture_scale(bg,0,0,sx,sy);
-        return;
-    }
-    /* The packaged stage preview is one viewport wide. Until the complete
-       bg.dat multi-layer renderer lands, tile that original-derived preview
-       and move it at a mild parallax rate. This makes stage phase transitions
-       continuous instead of tearing the scene down and reloading it. */
-    float tile=tw*sx;
-    float off=-fmodf(g_camera_x*0.55f,tile);
-    if(off>0)off-=tile;
-    for(float x=off;x<960.0f;x+=tile)vita2d_draw_texture_scale(bg,x,0,sx,sy);
+    vita2d_draw_texture_scale(bg,0,0,960.0f/tw,544.0f/th);
 }
 
 static void draw_match(vita2d_pgf *font,vita2d_texture *bg,fighter_t *fighters,object_world_t *world,int cpu_count,int difficulty,bool cheat,bool paused,const lf2_match_options_t *options) {

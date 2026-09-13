@@ -18,6 +18,9 @@
     }
 }
 
+static vita2d_texture *load_stage_texture(int stage_index);
+static void free_stage_texture(vita2d_texture *tex);
+
 static int run_vs(bool cheat){
     vs_setup_t setup;setup_defaults(&setup);srand((unsigned)sceKernelGetSystemTimeWide());
     for(;;){
@@ -35,11 +38,11 @@ static int run_vs(bool cheat){
         int hostile=0;for(int i=0;i<setup.cpu_count;i++)if(setup.p1_team==0||setup.cpu_teams[i]==0||setup.p1_team!=setup.cpu_teams[i]){hostile=1;break;}
         if(!hostile)setup.cpu_teams[0]=0;
         int stage=setup.stage<0?(rand()%STAGE_COUNT):setup.stage;
-        vita2d_texture *stage_tex=vita2d_load_PNG_file(g_stages[stage].asset);
+        vita2d_texture *stage_tex=load_stage_texture(stage);
         if(!stage_tex){wait_message("Background Error","Die gewählte Karte konnte nicht geladen werden.");continue;}
         lf2_log_stage("vs:start","p1=%s team=%s cpus=%d stage=%s difficulty=%s",lf2_roster[setup.p1].name,ui_team_name(setup.p1_team),setup.cpu_count,g_stages[stage].name,ui_diff_name(setup.difficulty));
         int rc=lf2_run_match(g_font,stage_tex,setup.p1,setup.p1_team,setup.cpus,setup.cpu_teams,setup.cpu_count,setup.difficulty,cheat);
-        lf2_logf("INFO","lf2_run_match returned %d",rc);vita2d_wait_rendering_done();vita2d_free_texture(stage_tex);lf2_log_memory("stage texture freed");
+        lf2_logf("INFO","lf2_run_match returned %d",rc);free_stage_texture(stage_tex);lf2_log_memory("stage texture freed");
         if(rc<0)wait_message("VS Mode Fehler","Der Kampf konnte nicht geladen werden. Bitte lf2.log und last_state.txt sichern.");
         return rc;
     }
@@ -52,13 +55,28 @@ static int run_vs(bool cheat){
 
 static vita2d_texture *load_stage_texture(int stage_index){
     if(stage_index<0||stage_index>=STAGE_COUNT)return NULL;
+    int bg_rc=lf2_background_load(stage_index);
+    if(bg_rc>=0){
+        /* Match code keeps a texture handle for the legacy fallback path.
+           Do not keep the ~2 MiB 960x544 preview resident when authored
+           bg.dat layers are active; a 1x1 handle is enough. */
+        vita2d_texture *placeholder=vita2d_create_empty_texture(1,1);
+        if(placeholder)return placeholder;
+        lf2_logf("WARN","background placeholder allocation failed idx=%d; loading PNG fallback",stage_index);
+    }else{
+        lf2_logf("WARN","authored background unavailable idx=%d rc=%d; using PNG fallback",stage_index,bg_rc);
+    }
     vita2d_texture *tex=vita2d_load_PNG_file(g_stages[stage_index].asset);
-    if(!tex)lf2_logf("ERROR","background load failed idx=%d asset=%s",stage_index,g_stages[stage_index].asset);
+    if(!tex){
+        lf2_logf("ERROR","background fallback load failed idx=%d asset=%s",stage_index,g_stages[stage_index].asset);
+        if(bg_rc<0)return NULL;
+        tex=vita2d_create_empty_texture(1,1);
+    }
     return tex;
 }
 
 static void free_stage_texture(vita2d_texture *tex){
-    if(!tex)return;vita2d_wait_rendering_done();vita2d_free_texture(tex);
+    vita2d_wait_rendering_done();lf2_background_unload();if(tex)vita2d_free_texture(tex);
 }
 
 static void mode_card(const char *title,const char *subtitle,int milliseconds){

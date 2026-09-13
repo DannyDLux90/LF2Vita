@@ -17,6 +17,7 @@
 
 #include "asset_pack.h"
 #include "audio.h"
+#include "background.h"
 #include "filecheck.h"
 #include "game.h"
 #include "lf2_data.h"

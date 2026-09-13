@@ -1,6 +1,43 @@
+--- a/src/background.h
++++ b/src/background.h
+@@ -12,5 +12,9 @@
+    authored background is active; false lets the caller draw its PNG fallback. */
+ bool lf2_background_draw(float camera_x);
+ int lf2_background_loaded_stage(void);
++/* Authored PC bg.dat playable depth limits, expressed as screen-space Y of
++   the fighter feet. Returns -1 when no authored background is active. */
++int lf2_background_z_top(void);
++int lf2_background_z_bottom(void);
+ 
+ #endif
 --- a/src/background.c
 +++ b/src/background.c
-@@ -165,13 +165,10 @@
+@@ -41,6 +41,7 @@
+     int loaded;
+     int stage_index;
+     int width;
++    int z_top,z_bottom;
+     char name[64];
+     uint32_t timer;
+     bg_layer_t layers[BG_MAX_LAYERS];
+@@ -71,6 +72,16 @@
+     return (int)strtol(p,NULL,10);
+ }
+ 
++static void bg_find_pair(const char *text,const char *key,int *a,int *b,int fallback_a,int fallback_b){
++    if(a)*a=fallback_a;if(b)*b=fallback_b;if(!text||!key||!a||!b)return;
++    const char *p=strstr(text,key);if(!p)return;p+=strlen(key);
++    while(*p==' '||*p=='\t')p++;
++    char *end=NULL;long va=strtol(p,&end,10);if(end==p)return;p=end;
++    while(*p==' '||*p=='\t')p++;
++    long vb=strtol(p,&end,10);if(end==p)return;
++    *a=(int)va;*b=(int)vb;
++}
++
+ static void bg_copy_name(const char *text,char *out,size_t cap){
+     if(!out||cap<1){return;}out[0]=0;if(!text)return;
+     const char *p=strstr(text,"name:");if(!p)return;p+=5;while(*p==' '||*p=='\t')p++;
+@@ -165,13 +176,10 @@
  }
  
  static void bg_sort_draw_order(void){
@@ -17,7 +54,27 @@
  }
  
  void lf2_background_unload(void){
-@@ -219,9 +216,10 @@
+@@ -185,14 +193,18 @@
+     g_bg.stage_index=stage_index;char *text=NULL;int rc=bg_decode_dat(g_bg_dat_paths[stage_index],&text);
+     if(rc<0){lf2_logf("ERROR","BG dat decode failed stage=%d path=%s rc=%d",stage_index,g_bg_dat_paths[stage_index],rc);lf2_background_unload();return -2;}
+     g_bg.width=bg_find_int(text,"width:",0);bg_copy_name(text,g_bg.name,sizeof(g_bg.name));
++    bg_find_pair(text,"zboundary:",&g_bg.z_top,&g_bg.z_bottom,-1,-1);
++    if(g_bg.z_top<0||g_bg.z_bottom<=g_bg.z_top){g_bg.z_top=-1;g_bg.z_bottom=-1;}
+     rc=bg_parse_layers(text);free(text);
+     if(rc<0||g_bg.width<=0){lf2_logf("ERROR","BG parse failed stage=%d rc=%d width=%d",stage_index,rc,g_bg.width);lf2_background_unload();return -3;}
+     bg_sort_draw_order();g_bg.timer=0;g_bg.loaded=1;
+-    lf2_logf("BG","loaded stage=%d name=%s width=%d layers=%d textures=%d",stage_index,g_bg.name,g_bg.width,g_bg.layer_count,g_bg.texture_count);
++    lf2_logf("BG","loaded stage=%d name=%s width=%d zboundary=%d..%d layers=%d textures=%d",stage_index,g_bg.name,g_bg.width,g_bg.z_top,g_bg.z_bottom,g_bg.layer_count,g_bg.texture_count);
+     return 0;
+ }
+ 
+ int lf2_background_loaded_stage(void){return g_bg.loaded?g_bg.stage_index:-1;}
++int lf2_background_z_top(void){return g_bg.loaded?g_bg.z_top:-1;}
++int lf2_background_z_bottom(void){return g_bg.loaded?g_bg.z_bottom:-1;}
+ void lf2_background_tick(void){if(g_bg.loaded)g_bg.timer++;}
+ 
+ static int bg_layer_visible(const bg_layer_t *l){
+@@ -219,9 +231,10 @@
      for(int oi=0;oi<g_bg.layer_count;oi++){
          bg_layer_t *l=&g_bg.layers[g_bg.draw_order[oi]];if(!bg_layer_visible(l))continue;
          float ratio=fabsf(denom)>0.01f?((float)l->width-BG_PC_VIEW_W)/denom:0.0f;
@@ -31,30 +88,44 @@
          if(l->rect_present){
              float x=(float)l->x*BG_X_SCALE+group_x,w=(float)l->width*BG_X_SCALE;
              if(x<BG_VITA_VIEW_W&&x+w>0.0f&&l->height>0)vita2d_draw_rectangle(x,y,w,(float)l->height,bg_rect_color(l->rect_value));
---- a/src/fix3/main_06.inc
-+++ b/src/fix3/main_06.inc
-@@ -1,7 +1,7 @@
-                                 const lf2_stage_t *st,const char *label,
--                                int ally_count,const int *allies,int *ally_hp,int *ally_mp,
--                                int *carry_hp,int *carry_mp,unsigned *rng){
--    if(!st||!carry_hp||!carry_mp||!rng)return -1;
-+                                int ally_count,const int *allies,int *ally_hp,int *ally_dark_hp,int *ally_mp,
-+                                int *carry_hp,int *carry_dark_hp,int *carry_mp,unsigned *rng){
-+    if(!st||!carry_hp||!carry_dark_hp||!carry_mp||!rng)return -1;
-     lf2_stage_runtime_t rt;memset(&rt,0,sizeof(rt));
-     rt.phase_count=st->phase_count;
-     if(rt.phase_count>LF2_STAGE_RUNTIME_MAX_PHASES)rt.phase_count=LF2_STAGE_RUNTIME_MAX_PHASES;
---- a/src/fix3/game_08.inc
-+++ b/src/fix3/game_08.inc
-@@ -8,6 +8,8 @@
-     int n=0;if(!w)return 0;for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(w->objects[i].active&&w->objects[i].pickup_item)n++;return n;
- }
+--- a/src/fix3/game_09.inc
++++ b/src/fix3/game_09.inc
+@@ -106,7 +106,7 @@
+                 }
+                 if(slot<0){lf2_logf("CLONE","%s clone oid=%d skipped: no free dynamic fighter slot",f->def.name,op->oid);break;}
+                 float side=f->facing?-1.0f:1.0f;float x=clampf(f->x+side*(42.0f+24.0f*n),g_world_min_x,g_world_max_x);
+-                float z=clampf(f->z+(n?18.0f:-18.0f),-70.0f,75.0f);
++                float z=clampf(f->z+(n?18.0f:-18.0f),world_z_min(),world_z_max());
+                 if(load_fighter(&fighters[slot],clone_roster,true,f->team,x,z,f->facing,slot,10)==0){
+                     fighters[slot].clone=true;fighters[slot].mp=150;
+                     if(op->action>0&&op->action<LF2_MAX_FRAMES&&fighters[slot].def.frames[op->action].present)set_frame(&fighters[slot],op->action);
+--- a/src/fix3/game_07.inc
++++ b/src/fix3/game_07.inc
+@@ -134,7 +134,7 @@
+     object_cache_entry_t *cache=object_cache_get(w,oid);if(!cache)return NULL;
+     world_object_t *o=world_alloc_object(w);if(!o)return NULL;
+     o->cache=cache;o->oid=oid;o->type=cache->type;o->owner=-1;o->team=0;o->pickup_item=true;
+-    o->x=clampf(x,g_world_min_x,g_world_max_x);o->z=clampf(z,-65.0f,70.0f);o->y=y;o->facing=0;
++    o->x=clampf(x,g_world_min_x,g_world_max_x);o->z=clampf(z,world_z_min()+5.0f,world_z_max()-5.0f);o->y=y;o->facing=0;
+     /* Stock keeps bottle contents separate from weapon life. */
+     o->durability=item_is_bottle(oid)?item_units_for_oid(oid):0;
+     o->weapon_hp=item_initial_weapon_hp(cache);
+--- a/src/fix3/game_01.inc
++++ b/src/fix3/game_01.inc
+@@ -22,6 +22,13 @@
+ #define GROUND_Y 420.0f
+ #define SPRITE_SCALE 1.0f
  
-+static lf2_frame_def_t *object_frame_def(world_object_t *o);
++/* PC bg.dat expresses zboundary directly as the screen-space Y range in which
++   fighter feet may move. Keep simulation Z in the existing LF2 relative unit
++   system, but derive its min/max from the active authored background instead
++   of forcing every arena to the Stanley-like -70..75 approximation. */
++static float world_z_min(void){int y=lf2_background_z_top();return y>=0?(float)y-GROUND_Y:-70.0f;}
++static float world_z_max(void){int y=lf2_background_z_bottom();return y>=0?(float)y-GROUND_Y:75.0f;}
 +
- static int item_is_pc_pickable(world_object_t *o){
-     if(!o||!o->active||!o->pickup_item||!o->grounded)return 0;
-     lf2_frame_def_t *fr=object_frame_def(o);
+ static int lf2_pgf_draw_text_shadow(vita2d_pgf *font,int x,int y,unsigned color,float scale,const char *text){
+     if(!font||!text)return 0;
+     vita2d_pgf_draw_text(font,x+2,y+2,RGBA8(0,0,0,220),scale,text);
 --- a/src/fix3/game_14.inc
 +++ b/src/fix3/game_14.inc
 @@ -101,7 +101,10 @@
@@ -69,22 +140,37 @@
                      return 1;
                  }
                  continue;
---- a/src/fix3/game_23.inc
-+++ b/src/fix3/game_23.inc
-@@ -35,7 +35,12 @@
-     float old_min=g_world_min_x,old_max=g_world_max_x,old_cam=g_camera_x;
-     float old_bg_origin=g_background_camera_origin;
-     g_world_min_x=40.0f;g_camera_x=0.0f;
--    g_background_camera_origin=(float)stage->phases[0].background_origin;
-+    /* background_origin marks authored section identity/placement.  The draw
-+       camera origin itself must start at the actual global camera position;
-+       otherwise a newly entered section can remain frozen until g_camera_x
-+       catches up with a much larger world offset. */
-+    int current_bg_section_origin=stage->phases[0].background_origin;
-+    g_background_camera_origin=g_camera_x;
-     int final_bound=stage->phases[stage->phase_count-1].bound;
-     if(final_bound<920)final_bound=920;
-     g_world_max_x=(float)stage->phases[0].bound-40.0f;if(g_world_max_x<920.0f)g_world_max_x=920.0f;
+--- a/src/fix3/game_05.inc
++++ b/src/fix3/game_05.inc
+@@ -140,7 +140,7 @@
+         f->vx=lf2_unit_friction_axis(f->vx);f->vz=lf2_unit_friction_axis(f->vz);
+     }
+     f->x=clampf(f->x,g_world_min_x,g_world_max_x);
+-    f->z=clampf(f->z,-70.0f,75.0f);
++    f->z=clampf(f->z,world_z_min(),world_z_max());
+ }
+ 
+ static void update_control(fighter_t *f, const input_t *in) {
+@@ -206,7 +206,7 @@
+         if(f->frame<55||f->frame>58){if(f->def.frames[55].present)set_frame(f,55);}
+         else update_animation(f,in);
+         if(f->held_units<=0){finish_drink(f,1);return;}
+-        f->x=clampf(f->x,g_world_min_x,g_world_max_x);f->z=clampf(f->z,-70.0f,75.0f);
++        f->x=clampf(f->x,g_world_min_x,g_world_max_x);f->z=clampf(f->z,world_z_min(),world_z_max());
+         return;
+     }
+     if(f->caught_by>=0 && !f->dead){
+--- a/src/fix3/game_08.inc
++++ b/src/fix3/game_08.inc
+@@ -8,6 +8,8 @@
+     int n=0;if(!w)return 0;for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(w->objects[i].active&&w->objects[i].pickup_item)n++;return n;
+ }
+ 
++static lf2_frame_def_t *object_frame_def(world_object_t *o);
++
+ static int item_is_pc_pickable(world_object_t *o){
+     if(!o||!o->active||!o->pickup_item||!o->grounded)return 0;
+     lf2_frame_def_t *fr=object_frame_def(o);
 --- a/src/fix3/game_24.inc
 +++ b/src/fix3/game_24.inc
 @@ -53,13 +53,12 @@
@@ -106,3 +192,32 @@
                      }
                      g_world_max_x=(float)stage->phases[phase].bound-40.0f;
                      if(g_world_max_x<920.0f)g_world_max_x=920.0f;
+--- a/src/fix3/game_23.inc
++++ b/src/fix3/game_23.inc
+@@ -35,7 +35,12 @@
+     float old_min=g_world_min_x,old_max=g_world_max_x,old_cam=g_camera_x;
+     float old_bg_origin=g_background_camera_origin;
+     g_world_min_x=40.0f;g_camera_x=0.0f;
+-    g_background_camera_origin=(float)stage->phases[0].background_origin;
++    /* background_origin marks authored section identity/placement.  The draw
++       camera origin itself must start at the actual global camera position;
++       otherwise a newly entered section can remain frozen until g_camera_x
++       catches up with a much larger world offset. */
++    int current_bg_section_origin=stage->phases[0].background_origin;
++    g_background_camera_origin=g_camera_x;
+     int final_bound=stage->phases[stage->phase_count-1].bound;
+     if(final_bound<920)final_bound=920;
+     g_world_max_x=(float)stage->phases[0].bound-40.0f;if(g_world_max_x<920.0f)g_world_max_x=920.0f;
+--- a/src/fix3/main_06.inc
++++ b/src/fix3/main_06.inc
+@@ -1,7 +1,7 @@
+                                 const lf2_stage_t *st,const char *label,
+-                                int ally_count,const int *allies,int *ally_hp,int *ally_mp,
+-                                int *carry_hp,int *carry_mp,unsigned *rng){
+-    if(!st||!carry_hp||!carry_mp||!rng)return -1;
++                                int ally_count,const int *allies,int *ally_hp,int *ally_dark_hp,int *ally_mp,
++                                int *carry_hp,int *carry_dark_hp,int *carry_mp,unsigned *rng){
++    if(!st||!carry_hp||!carry_dark_hp||!carry_mp||!rng)return -1;
+     lf2_stage_runtime_t rt;memset(&rt,0,sizeof(rt));
+     rt.phase_count=st->phase_count;
+     if(rt.phase_count>LF2_STAGE_RUNTIME_MAX_PHASES)rt.phase_count=LF2_STAGE_RUNTIME_MAX_PHASES;

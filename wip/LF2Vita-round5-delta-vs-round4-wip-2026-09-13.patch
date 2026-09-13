@@ -1,0 +1,108 @@
+--- a/src/background.c
++++ b/src/background.c
+@@ -165,13 +165,10 @@
+ }
+ 
+ static void bg_sort_draw_order(void){
++    /* bg.dat is already authored back-to-front.  PC LF2 composites layers in
++       file order; sorting by parallax width changes the intended overlap
++       (notably floor rects/foreground strips in Stanley Prison/Lion Forest). */
+     for(int i=0;i<g_bg.layer_count;i++)g_bg.draw_order[i]=i;
+-    for(int i=0;i<g_bg.layer_count;i++)for(int j=i+1;j<g_bg.layer_count;j++){
+-        bg_layer_t *a=&g_bg.layers[g_bg.draw_order[i]],*b=&g_bg.layers[g_bg.draw_order[j]];
+-        if(a->width>b->width||(a->width==b->width&&a->source_order>b->source_order)){
+-            int t=g_bg.draw_order[i];g_bg.draw_order[i]=g_bg.draw_order[j];g_bg.draw_order[j]=t;
+-        }
+-    }
+ }
+ 
+ void lf2_background_unload(void){
+@@ -219,9 +216,10 @@
+     for(int oi=0;oi<g_bg.layer_count;oi++){
+         bg_layer_t *l=&g_bg.layers[g_bg.draw_order[oi]];if(!bg_layer_visible(l))continue;
+         float ratio=fabsf(denom)>0.01f?((float)l->width-BG_PC_VIEW_W)/denom:0.0f;
+-        /* The authored 794-wide PC coordinate system is stretched to Vita
+-           width, so its camera displacement must use the same scale as layer x. */
+-        float group_x=-camera_x*ratio*BG_X_SCALE;float y=bg_layer_y(l);
++        /* camera_x is already a Vita/world-space displacement.  Scaling it
++           again makes a foreground layer (ratio 1.0) scroll ~21% faster than
++           fighters.  Only authored source coordinates are widened to 960. */
++        float group_x=-camera_x*ratio;float y=bg_layer_y(l);
+         if(l->rect_present){
+             float x=(float)l->x*BG_X_SCALE+group_x,w=(float)l->width*BG_X_SCALE;
+             if(x<BG_VITA_VIEW_W&&x+w>0.0f&&l->height>0)vita2d_draw_rectangle(x,y,w,(float)l->height,bg_rect_color(l->rect_value));
+--- a/src/fix3/main_06.inc
++++ b/src/fix3/main_06.inc
+@@ -1,7 +1,7 @@
+                                 const lf2_stage_t *st,const char *label,
+-                                int ally_count,const int *allies,int *ally_hp,int *ally_mp,
+-                                int *carry_hp,int *carry_mp,unsigned *rng){
+-    if(!st||!carry_hp||!carry_mp||!rng)return -1;
++                                int ally_count,const int *allies,int *ally_hp,int *ally_dark_hp,int *ally_mp,
++                                int *carry_hp,int *carry_dark_hp,int *carry_mp,unsigned *rng){
++    if(!st||!carry_hp||!carry_dark_hp||!carry_mp||!rng)return -1;
+     lf2_stage_runtime_t rt;memset(&rt,0,sizeof(rt));
+     rt.phase_count=st->phase_count;
+     if(rt.phase_count>LF2_STAGE_RUNTIME_MAX_PHASES)rt.phase_count=LF2_STAGE_RUNTIME_MAX_PHASES;
+--- a/src/fix3/game_08.inc
++++ b/src/fix3/game_08.inc
+@@ -8,6 +8,8 @@
+     int n=0;if(!w)return 0;for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(w->objects[i].active&&w->objects[i].pickup_item)n++;return n;
+ }
+ 
++static lf2_frame_def_t *object_frame_def(world_object_t *o);
++
+ static int item_is_pc_pickable(world_object_t *o){
+     if(!o||!o->active||!o->pickup_item||!o->grounded)return 0;
+     lf2_frame_def_t *fr=object_frame_def(o);
+--- a/src/fix3/game_14.inc
++++ b/src/fix3/game_14.inc
+@@ -101,7 +101,10 @@
+                 if(it->kind==2&&target->type!=2&&a->held_oid)continue;
+                 if(!item_itr_overlaps(target,it,ax,ay,a->z))continue;
+                 if(fighter_take_loose_item(a,target,0)){
+-                    if(it->vrest>0)a->vrest_ticks[oi<LF2_MAX_ACTORS?oi:0]=it->vrest;
++                    /* vrest is indexed by fighter victim, not by object slot.
++                       The picked object is deactivated immediately, so writing
++                       its object index into fighter vrest corrupts an unrelated
++                       actor cooldown and can suppress later legitimate hits. */
+                     return 1;
+                 }
+                 continue;
+--- a/src/fix3/game_23.inc
++++ b/src/fix3/game_23.inc
+@@ -35,7 +35,12 @@
+     float old_min=g_world_min_x,old_max=g_world_max_x,old_cam=g_camera_x;
+     float old_bg_origin=g_background_camera_origin;
+     g_world_min_x=40.0f;g_camera_x=0.0f;
+-    g_background_camera_origin=(float)stage->phases[0].background_origin;
++    /* background_origin marks authored section identity/placement.  The draw
++       camera origin itself must start at the actual global camera position;
++       otherwise a newly entered section can remain frozen until g_camera_x
++       catches up with a much larger world offset. */
++    int current_bg_section_origin=stage->phases[0].background_origin;
++    g_background_camera_origin=g_camera_x;
+     int final_bound=stage->phases[stage->phase_count-1].bound;
+     if(final_bound<920)final_bound=920;
+     g_world_max_x=(float)stage->phases[0].bound-40.0f;if(g_world_max_x<920.0f)g_world_max_x=920.0f;
+--- a/src/fix3/game_24.inc
++++ b/src/fix3/game_24.inc
+@@ -53,13 +53,12 @@
+                     result=LF2_MATCH_WIN;result_since=now;
+                 }else{
+                     int old_bound=stage->phases[phase].bound;
+-                    float previous_bg_origin=g_background_camera_origin;
+                     phase++;queue_pos=0;
+-                    g_background_camera_origin=(float)stage->phases[phase].background_origin;
+-                    if(g_background_camera_origin!=previous_bg_origin){
+-                        float local_camera=g_camera_x-g_background_camera_origin;if(local_camera<0.0f)local_camera=0.0f;
+-                        lf2_logf("BG","section origin=%.0f global_camera=%.1f local_camera=%.1f phase=%d/%d",
+-                                 g_background_camera_origin,g_camera_x,local_camera,phase+1,stage->phase_count);
++                    if(stage->phases[phase].background_origin!=current_bg_section_origin){
++                        current_bg_section_origin=stage->phases[phase].background_origin;
++                        g_background_camera_origin=g_camera_x;
++                        lf2_logf("BG","section world_origin=%d camera_origin=%.1f global_camera=%.1f local_camera=0.0 phase=%d/%d",
++                                 current_bg_section_origin,g_background_camera_origin,g_camera_x,phase+1,stage->phase_count);
+                     }
+                     g_world_max_x=(float)stage->phases[phase].bound-40.0f;
+                     if(g_world_max_x<920.0f)g_world_max_x=920.0f;

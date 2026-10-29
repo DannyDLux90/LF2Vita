@@ -45,7 +45,7 @@ The AdHoc model reported `avg_wait_ms=12.48`, `worst_wait_ms=129`, `start_worst_
 
 ## Merge checklist
 
-1. Import the *exact* latest hotfix source from the user's 2026-09-13 bundle into this branch; avoid publishing proprietary gamepak/derived art/VitaSDK packages.
+1. Import the *exact* latest hotfix source from the user's 2026-09-13 bundle into this branch, e.g. first run `python3 tools/sync_source_snapshot.py /path/to/LF2Vita-next-chat-source-workspace-2026-09-13.zip` for a dry-run and then repeat with `--apply` on a clean checkout. Review the Git diff. This script only copies allowed text source and deliberately excludes proprietary gamepak/derived art/VitaSDK packages.
 2. Compare file hashes and source/asset manifests, including Stage heap allocation, AdHoc v7 and bounce correction.
 3. Re-run the regression scripts and perform a clean VitaSDK ELF → VELF → SELF → VPK build.
 4. Verify Stage 1–5 on Vita (background/camera, crowd of 8 allies, bounce/AI/MP), plus two-device AdHoc discover/join/host/disconnect/hot-join.

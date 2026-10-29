@@ -4,7 +4,7 @@ Native PS Vita reimplementation of **Little Fighter 2 2.00a**, built with VitaSD
 
 > The public repository contains the port source code and reproducible workspace tooling. Original Little Fighter 2 game data, music and derived game artwork are not redistributed in Git. Supply your own LF2 2.00a files to make the local game pack and title BGM.
 
-> **Round 6 source-sync notice (2026-10-29):** This branch contains more PC-fidelity code than `main`, but still needs the source changes from the supplied 2026-09-13 Stage-crash/AdHoc-v7/bounce hotfix before it can be treated as the latest VPK source. See [source-sync checklist and 4-screenshot visual QA](docs/SOURCE_SYNC_VISUAL_QA_2026-10-29.md).
+> **Round 6 source-sync notice (2026-10-29):** This branch contains more PC-fidelity code than `main`, but still needs the source changes from the supplied 2026-09-13 Stage-crash/AdHoc-v7/bounce hotfix before it can be treated as the latest VPK source. See [source-sync checklist and 4-screenshot visual QA](docs/SOURCE_SYNC_VISUAL_QA_2026-10-29.md) and [local VitaSDK cross-build verification](docs/LOCAL_SDK_BUILD_2026-10-29.md).
 
 Current hardware-test version: **0.70**. Current milestone: **Vita-to-Vita multiplayer — AdHoc discovery and synchronized lobby**.
 

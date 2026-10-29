@@ -7,22 +7,14 @@
 }
 
 static void draw_world_background(vita2d_texture *bg){
+    /* Prefer the original encrypted bg.dat + BMP layers from game.lf2pak.
+       The packaged PNG remains only as a safety fallback for malformed or
+       missing user data. */
+    if(lf2_background_draw(g_camera_x))return;
     if(!bg)return;
     float tw=(float)vita2d_texture_get_width(bg),th=(float)vita2d_texture_get_height(bg);
     if(tw<=0||th<=0)return;
-    float sx=960.0f/tw,sy=544.0f/th;
-    if(g_camera_x<=0.01f){
-        vita2d_draw_texture_scale(bg,0,0,sx,sy);
-        return;
-    }
-    /* The packaged stage preview is one viewport wide. Until the complete
-       bg.dat multi-layer renderer lands, tile that original-derived preview
-       and move it at a mild parallax rate. This makes stage phase transitions
-       continuous instead of tearing the scene down and reloading it. */
-    float tile=tw*sx;
-    float off=-fmodf(g_camera_x*0.55f,tile);
-    if(off>0)off-=tile;
-    for(float x=off;x<960.0f;x+=tile)vita2d_draw_texture_scale(bg,x,0,sx,sy);
+    vita2d_draw_texture_scale(bg,0,0,960.0f/tw,544.0f/th);
 }
 
 static void draw_match(vita2d_pgf *font,vita2d_texture *bg,fighter_t *fighters,object_world_t *world,int cpu_count,int difficulty,bool cheat,bool paused,const lf2_match_options_t *options) {
@@ -65,7 +57,10 @@ static void draw_match(vita2d_pgf *font,vita2d_texture *bg,fighter_t *fighters,o
         if(cheat)lf2_ui_draw_text(760,122,0.55f,RGBA8(255,225,80,255),"LF2.NET / CRAZY");
     }
     if((!options||!options->suppress_result_overlay) && (!player_side_alive(fighters,total)||!player_has_enemy(fighters,total))){
-        vita2d_draw_rectangle(235,185,490,135,RGBA8(0,0,0,205));const char *msg=player_side_won(fighters,total)?"K.O. - Spieler 1 gewinnt":"K.O. - Spieler 1 ist besiegt";
+        vita2d_draw_rectangle(235,185,490,135,RGBA8(0,0,0,205));
+        bool view_won=player_side_won(fighters,total);const char *msg=NULL;
+        if(options&&options->result_view_local){if(options->result_view_invert)view_won=!view_won;msg=view_won?"K.O. - Sieg":"K.O. - Niederlage";}
+        else msg=view_won?"K.O. - Spieler 1 gewinnt":"K.O. - Spieler 1 ist besiegt";
         if(lf2_ui_font_ready()){float tw=lf2_ui_text_width(0.92f,msg);lf2_ui_draw_text(480.0f-tw*0.5f,216,0.92f,RGBA8(255,255,255,255),msg);if(options&&options->auto_continue)lf2_ui_draw_text(337,268,0.72f,RGBA8(235,242,255,255),"Weiter...");else if(options&&!options->allow_rematch)lf2_ui_draw_text(280,268,0.72f,RGBA8(235,242,255,255),"X: Continue     Circle: Menu");else lf2_ui_draw_text(302,268,0.72f,RGBA8(235,242,255,255),"X: Rematch     Circle: Menu");}
     }else if(paused){vita2d_draw_rectangle(285,190,390,120,RGBA8(0,0,0,215));if(lf2_ui_font_ready()){lf2_ui_draw_text(418,216,1.0f,RGBA8(255,255,255,255),"PAUSE");lf2_ui_draw_text(330,264,0.72f,RGBA8(235,242,255,255),"START: Resume   Circle: Menu");}}
     vita2d_end_drawing();vita2d_swap_buffers();

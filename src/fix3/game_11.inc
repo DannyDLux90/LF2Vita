@@ -15,9 +15,11 @@ static void update_object(object_world_t *w,world_object_t *o,fighter_t *fighter
         if(!o->grounded){
             o->age++;o->x+=o->vx;o->y+=o->vy;o->z+=o->vz;o->vy+=0.62f;o->vx*=0.992f;o->vz*=0.992f;
             if(o->y>=0.0f){
+                float impact=sqrtf(o->vx*o->vx+o->vy*o->vy+o->vz*o->vz);
                 o->y=0.0f;o->vy=o->vx=o->vz=0.0f;o->grounded=true;
+                if(item_apply_drop_hurt(o,impact))return;
                 object_set_frame(o,object_landing_frame(o->cache));
-                lf2_logf("ITEM","land oid=%d name=%s x=%.1f z=%.1f frame=%d",o->oid,item_name(o->oid),o->x,o->z,o->frame);
+                lf2_logf("ITEM","land oid=%d name=%s x=%.1f z=%.1f frame=%d weapon_hp=%d",o->oid,item_name(o->oid),o->x,o->z,o->frame,o->weapon_hp);
                 return;
             }
             o->ticks++;int duration=fr->wait+1;if(duration<1)duration=1;
@@ -92,14 +94,22 @@ static void update_object(object_world_t *w,world_object_t *o,fighter_t *fighter
     if(o->type==1&&fr->state==1002)o->vy+=0.45f;
     if(o->type==2&&fr->state==2000)o->vy+=0.45f;
     if(o->type==1&&o->y>=2.0f&&fr->state==1002){
+        float impact=sqrtf(o->vx*o->vx+o->vy*o->vy+o->vz*o->vz);
         o->y=0.0f;o->vx=o->vy=o->vz=0.0f;
-        if(o->recoverable_weapon){o->pickup_item=true;o->grounded=true;o->owner=-1;o->team=0;object_set_frame(o,object_landing_frame(o->cache));}
-        else if(o->cache->def.frames[60].present)object_set_frame(o,60);else o->active=false;
+        if(o->recoverable_weapon){
+            o->pickup_item=true;o->grounded=true;o->owner=-1;o->team=0;
+            if(item_apply_drop_hurt(o,impact))return;
+            object_set_frame(o,object_landing_frame(o->cache));
+        } else if(o->cache->def.frames[60].present)object_set_frame(o,60);else o->active=false;
     }
     if(o->type==2&&o->y>=2.0f&&fr->state==2000){
+        float impact=sqrtf(o->vx*o->vx+o->vy*o->vy+o->vz*o->vz);
         o->y=0.0f;o->vx=o->vy=o->vz=0.0f;
-        if(o->recoverable_weapon){o->pickup_item=true;o->grounded=true;o->owner=-1;o->team=0;object_set_frame(o,object_landing_frame(o->cache));}
-        else if(o->cache->def.frames[20].present)object_set_frame(o,20);else o->active=false;
+        if(o->recoverable_weapon){
+            o->pickup_item=true;o->grounded=true;o->owner=-1;o->team=0;
+            if(item_apply_drop_hurt(o,impact))return;
+            object_set_frame(o,object_landing_frame(o->cache));
+        } else if(o->cache->def.frames[20].present)object_set_frame(o,20);else o->active=false;
     }
     if(!o->active)return;
     /* Projectiles live in world coordinates.  The old fixed 960px VS bound

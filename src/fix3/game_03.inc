@@ -110,6 +110,15 @@ static void update_animation(fighter_t *f, const input_t *in) {
     if (!fr) { set_frame(f,0); return; }
     f->ticks++;
     if(f->falling && f->frame>=180 && f->frame<=191){
+        if(g_runtime_stock_compat){
+            /* Stock type-0 state 12 is trajectory driven, not an authored
+               180..191 animation loop. The entry hit already selected the
+               forward (180-series) or backward (186-series) group. */
+            int base=(f->frame<=185)?180:186;
+            int n=(f->vy<-10.0f)?base:(f->vy<0.0f)?base+1:(f->vy<6.0f)?base+2:base+3;
+            if(n!=f->frame&&f->def.frames[n].present)set_frame(f,n);
+            return;
+        }
         if(f->ticks>=2){int n=f->frame+1;if(n>191)n=180;set_frame(f,n);}return;
     }
     /* LF2's wait value is measured in 30 Hz time units. The simulation now

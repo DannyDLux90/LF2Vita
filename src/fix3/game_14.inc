@@ -17,25 +17,79 @@
                 resolved.dvx=ws->dvx;resolved.dvy=ws->dvy;resolved.fall=ws->fall;resolved.arest=ws->arest;resolved.vrest=ws->vrest;
                 resolved.bdefend=ws->bdefend;resolved.injury=ws->injury;resolved.effect=ws->effect;
             }
-            int dmg=resolved.injury>0?resolved.injury:1;
-            if(a->ai){
+            int authored=resolved.injury>0?resolved.injury:0;
+            int dmg=g_runtime_stock_compat?authored:(resolved.injury>0?resolved.injury:1);
+            if(!g_runtime_stock_compat&&a->ai){
                 if(difficulty==LF2_DIFF_EASY)dmg=dmg*4/5;
                 else if(difficulty==LF2_DIFF_DIFFICULT)dmg=dmg*11/10;
                 else if(difficulty==LF2_DIFF_CRAZY)dmg=dmg*5/4;
             }
-            if(b->frame==110)dmg=(dmg+3)/4;if(dmg<1)dmg=1;
+            int defended=stock_try_defend_hit(b,a->facing,&resolved,authored,&dmg);
+            if(!g_runtime_stock_compat&&b->frame==110)dmg=(dmg+3)/4;
+            if(!g_runtime_stock_compat&&dmg<1)dmg=1;
             int old=b->hp;b->hp-=dmg;if(b->hp<0)b->hp=0;if(b->hp==0)b->dead=true;
-            if(!b->dead)apply_hit_reaction(b,a->facing,&resolved);
-            lf2_audio_play(item_hit_sound(oid));spawn_hit_fx(world,b,0);
-            if(a->held_units>0)a->held_units--;
-            if(a->held_units<=0){
-                lf2_logf("ITEM","%s weapon broke oid=%d name=%s",a->def.name,oid,item_name(oid));
-                a->held_oid=0;a->held_units=0;lf2_audio_play("data/094.wav");
+            if(!defended){
+                stock_note_unblocked_hit(b);
+                if(!b->dead)apply_hit_reaction(b,a->facing,&resolved);
+                lf2_audio_play(item_hit_sound(oid));spawn_hit_fx(world,b,0);
+            }else if(b->dead){
+                apply_hit_reaction(b,a->facing,&resolved);
             }
+            /* Striking a victim does not consume weapon_hp in PC LF2. The
+               weapon loses HP only when the weapon object itself is damaged or
+               takes authored weapon_drop_hurt on a hard landing. */
             if(resolved.arest>0)a->arest_ticks=resolved.arest;
             if(resolved.vrest>0)a->vrest_ticks[bidx]=resolved.vrest;
-            lf2_logf("ITEM","weapon hit attacker=%s oid=%d target=%s hp=%d->%d frame=%d",
-                     a->def.name,oid,b->def.name,old,b->hp,wf_id);
+            lf2_logf("ITEM","weapon hit attacker=%s oid=%d target=%s hp=%d->%d frame=%d defend=%d",
+                     a->def.name,oid,b->def.name,old,b->hp,wf_id,defended);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int fighter_apply_hits_to_items(object_world_t *world,fighter_t *fighters,int total,int aidx){
+    if(!world||!fighters||aidx<0||aidx>=total)return 0;
+    fighter_t *a=&fighters[aidx];if(!a->active||a->dead)return 0;
+    lf2_frame_def_t *af=frame_def(a);if(!af)return 0;
+
+    /* A held weapon's kind-5 region is itself allowed to damage loose weapons. */
+    if(a->held_oid&&!item_is_bottle(a->held_oid)&&a->arest_ticks<=0&&af->wpoint.present&&af->wpoint.attacking>0){
+        object_cache_entry_t *c=NULL;int wf_id=0;float wx=0,wy=0;
+        if(held_item_frame_and_pose(world,a,&c,&wf_id,&wx,&wy,NULL)&&c){
+            lf2_frame_def_t *wf=&c->def.frames[wf_id];world_object_t tmp;memset(&tmp,0,sizeof(tmp));
+            tmp.active=true;tmp.cache=c;tmp.oid=a->held_oid;tmp.type=c->type;tmp.frame=wf_id;tmp.facing=a->facing;tmp.x=wx;tmp.y=wy;tmp.z=a->z;
+            for(int ii=0;ii<wf->itr_count;ii++){
+                lf2_itr_def_t resolved=wf->itrs[ii];if(resolved.kind!=5)continue;
+                int strength_idx=af->wpoint.attacking-1;
+                if(resolved.injury==789&&strength_idx>=0&&strength_idx<4&&c->def.weapon_strength_present[strength_idx]){
+                    const lf2_itr_def_t *ws=&c->def.weapon_strength[strength_idx];
+                    resolved.dvx=ws->dvx;resolved.dvy=ws->dvy;resolved.fall=ws->fall;resolved.arest=ws->arest;resolved.vrest=ws->vrest;resolved.bdefend=ws->bdefend;resolved.injury=ws->injury;resolved.effect=ws->effect;
+                }
+                int ax,ay;object_region_world(&tmp,resolved.x,resolved.y,resolved.w,resolved.h,&ax,&ay);
+                for(int oi=0;oi<LF2_MAX_ACTIVE_OBJECTS;oi++){
+                    world_object_t *target=&world->objects[oi];if(!item_accepts_attack(target,&resolved,1))continue;
+                    if(!item_itr_overlaps(target,&resolved,ax,ay,a->z))continue;
+                    int broke=item_damage_object(target,resolved.injury,resolved.bdefend,"held weapon");
+                    if(!broke)item_react_to_hit(target,&resolved,a->facing);
+                    if(resolved.arest>0)a->arest_ticks=resolved.arest;
+                    return 1;
+                }
+            }
+        }
+    }
+
+    if(a->arest_ticks>0||af->itr_count<=0)return 0;
+    for(int ii=0;ii<af->itr_count;ii++){
+        lf2_itr_def_t *it=&af->itrs[ii];
+        if(it->kind!=0&&it->kind!=5)continue; /* passive/catch/status regions do not hurt weapons */
+        int ax,ay;region_world(a,it->x,it->y,it->w,it->h,&ax,&ay);
+        for(int oi=0;oi<LF2_MAX_ACTIVE_OBJECTS;oi++){
+            world_object_t *target=&world->objects[oi];if(!item_accepts_attack(target,it,0))continue;
+            if(!item_itr_overlaps(target,it,ax,ay,a->z))continue;
+            int broke=item_damage_object(target,it->injury,it->bdefend,"fighter attack");
+            if(!broke)item_react_to_hit(target,it,a->facing);
+            if(it->arest>0)a->arest_ticks=it->arest;
             return 1;
         }
     }
@@ -43,6 +97,7 @@
 }
 
 static void apply_hits(object_world_t *world,fighter_t *fighters,int total,int aidx,int bidx,int difficulty) {
+    if(!fighters||aidx<0||bidx<0||aidx>=total||bidx>=total||aidx==bidx)return;
     fighter_t *a=&fighters[aidx],*b=&fighters[bidx];
     if (a->dead || b->dead) return;
     lf2_frame_def_t *af=frame_def(a), *bf=frame_def(b);
@@ -59,7 +114,12 @@ static void apply_hits(object_world_t *world,fighter_t *fighters,int total,int a
         /* kind:1 is the normal walking grab and only catches a stunned
            state-16 victim. kind:3 is the explicit special grab (Louis). */
         if(it->kind==1&&catch_itr&&bf->state!=16)continue;
-        if(it->kind!=0&&it->kind!=4&&it->kind!=5&&it->kind!=6&&!sustained&&!catch_itr)continue;
+        /* kind 6 is passive: it marks a vulnerable/super-punch target region
+           and must never execute as an attack of its owning fighter. Treating
+           it as active causes state-16 frames (for example Firen 226/227) to
+           deal zero-damage repeat hits and bounce a falling victim forever
+           between state 12 and injury frames. */
+        if(it->kind!=0&&it->kind!=4&&it->kind!=5&&!sustained&&!catch_itr)continue;
         if(it->kind==4&&bidx==a->thrown_by)continue;
         /* Original LF2 repeat-hit control: arest blocks this attacker for a
            few TU, while vrest blocks only this attacker/victim pair. There is

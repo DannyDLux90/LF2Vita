@@ -1,5 +1,15 @@
 static uint64_t now_us(void){return sceKernelGetSystemTimeWide();}
-static void set_error(const char *where,int rc){snprintf(g_error,sizeof(g_error),"%s: 0x%08X",where,(unsigned)rc);lf2_logf("NET","%s",g_error);}
+static void refresh_adhoc_diag(const char *where){
+    if(g_netctl_ready){g_adhoc_state=-1;g_adhoc_state_rc=sceNetCtlAdhocGetState(&g_adhoc_state);}
+    else {g_adhoc_state=-1;g_adhoc_state_rc=-1;}
+    snprintf(g_diag,sizeof(g_diag),"%s  ctl_state=%d ctl_rc=0x%08X match=%d",
+             where?where:"AdHoc",g_adhoc_state,(unsigned)g_adhoc_state_rc,g_match);
+}
+static void set_error(const char *where,int rc){
+    refresh_adhoc_diag(where);
+    snprintf(g_error,sizeof(g_error),"%s: 0x%08X (state=%d)",where,(unsigned)rc,g_adhoc_state);
+    lf2_logf("NET","%s diag=%s",g_error,g_diag);
+}
 static uint32_t fnv1a(const void *ptr,size_t n){const uint8_t *p=ptr;uint32_t h=2166136261u;for(size_t i=0;i<n;i++){h^=p[i];h*=16777619u;}return h;}
 
 static uint32_t local_avatar_hash(void){
@@ -9,14 +19,30 @@ static uint32_t local_avatar_hash(void){
 }
 
 static void queue_event(int event,const SceNetInAddr *addr,const void *data,int len){
+    /* DATA_CONFIRM is only transport bookkeeping. Queuing every confirmation
+       can crowd out real input packets during a retransmit burst, so let the
+       matching library consume it internally and keep our main-thread queue
+       for state/data events only. */
+    if(event==MATCH_DATA_CONFIRM)return;
     sceKernelLockLwMutex(&g_event_mutex,1,NULL);
-    int next=(g_ev_tail+1)%64;
-    if(next!=g_ev_head){queued_event_t *q=&g_events[g_ev_tail];memset(q,0,sizeof(*q));q->event=event;if(addr)q->addr=*addr;q->when_us=now_us();if(data&&len>0){if(len>(int)sizeof(q->data))len=sizeof(q->data);memcpy(q->data,data,len);q->len=len;}g_ev_tail=next;}
+    int next=(g_ev_tail+1)%LF2_EVENT_QUEUE_CAP;
+    if(next!=g_ev_head){
+        queued_event_t *q=&g_events[g_ev_tail];memset(q,0,sizeof(*q));q->event=event;if(addr)q->addr=*addr;q->when_us=now_us();
+        if(data&&len>0){if(len>(int)sizeof(q->data))len=sizeof(q->data);memcpy(q->data,data,len);q->len=len;}
+        g_ev_tail=next;
+        uint32_t depth=(uint32_t)((g_ev_tail-g_ev_head+LF2_EVENT_QUEUE_CAP)%LF2_EVENT_QUEUE_CAP);if(depth>g_event_peak)g_event_peak=depth;
+    }else g_event_drops++;
     sceKernelUnlockLwMutex(&g_event_mutex,1);
 }
 
-static void matching_cb(int id,int event,SceNetInAddr *addr,SceSize opt_len,void *opt){(void)id;queue_event(event,addr,opt,(int)opt_len);}
-static bool pop_event(queued_event_t *out){bool ok=false;sceKernelLockLwMutex(&g_event_mutex,1,NULL);if(g_ev_head!=g_ev_tail){*out=g_events[g_ev_head];g_ev_head=(g_ev_head+1)%64;ok=true;}sceKernelUnlockLwMutex(&g_event_mutex,1);return ok;}
+static void matching_cb(int id,int event,SceNetInAddr *addr,SceSize opt_len,void *opt){
+    (void)id;
+    /* Match input is latency critical. Cache it on the matching worker instead
+       of forcing the 30 Hz simulation to wait for the main-thread event queue. */
+    if(event==MATCH_DATA&&fast_match_input(addr,opt,(int)opt_len))return;
+    queue_event(event,addr,opt,(int)opt_len);
+}
+static bool pop_event(queued_event_t *out){bool ok=false;sceKernelLockLwMutex(&g_event_mutex,1,NULL);if(g_ev_head!=g_ev_tail){*out=g_events[g_ev_head];g_ev_head=(g_ev_head+1)%LF2_EVENT_QUEUE_CAP;ok=true;}sceKernelUnlockLwMutex(&g_event_mutex,1);return ok;}
 
 const char *lf2_net_mode_name(int m){static const char *n[]={"VS","Stage","Battle","1 vs 1","2 vs 2"};return (m>=0&&m<5)?n[m]:"?";}
 const char *lf2_net_status_name(int s){static const char *n[]={"Warte auf Spieler","Startet","Im Spiel","Ergebnis"};return (s>=0&&s<4)?n[s]:"Unbekannt";}
@@ -42,11 +68,12 @@ static void adhoc_cleanup_runtime(void){
     if(g_matching_ready){sceNetAdhocMatchingTerm();g_matching_ready=false;}
     if(g_ctl_ready){sceNetAdhocctlTerm();g_ctl_ready=false;}
     if(g_adhoc_ready){sceNetAdhocTerm();g_adhoc_ready=false;}
+    if(g_netctl_ready){sceNetCtlTerm();g_netctl_ready=false;}
     if(g_net_ready){sceNetTerm();g_net_ready=false;}
     free(g_match_mem);free(g_net_mem);g_match_mem=g_net_mem=NULL;
     if(g_mod_matching_loaded){sceSysmoduleUnloadModule(SCE_SYSMODULE_NET_ADHOC_MATCHING);g_mod_matching_loaded=false;}
     if(g_mod_adhoc_loaded){sceSysmoduleUnloadModule(SCE_SYSMODULE_PSPNET_ADHOC);g_mod_adhoc_loaded=false;}
     if(g_mod_net_loaded){sceSysmoduleUnloadModule(SCE_SYSMODULE_NET);g_mod_net_loaded=false;}
+    if(g_input_mutex_ready){sceKernelDeleteLwMutex(&g_input_mutex);g_input_mutex_ready=false;}
     if(g_mutex_ready){sceKernelDeleteLwMutex(&g_event_mutex);g_mutex_ready=false;}
 }
-

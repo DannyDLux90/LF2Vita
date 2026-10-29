@@ -96,7 +96,9 @@ static int stage_fill_enemy_slots(fighter_t *fighters,const lf2_stage_runtime_ph
         if(fighters[slot].active&&!stage_enemy_settled(&fighters[slot]))continue;
         if(fighters[slot].active){stage_preserve_corpse(world,cache,&fighters[slot]);unload_fighter_slot(&fighters[slot]);}
         int q=*queue_pos;
-        float x=stage_enemy_x(ph,q,fighters[0].x);
+        float party_x=fighters[0].x;
+        for(int pi=1;pi<first_enemy_slot;pi++)if(fighters[pi].active&&!fighters[pi].dead&&fighters[pi].human_no>0&&fighters[pi].x>party_x)party_x=fighters[pi].x;
+        float x=stage_enemy_x(ph,q,party_x);
         float z=spawn_z[slot];
         int roster=ph->enemies[q],hp=ph->hp[q]>0?ph->hp[q]:500;
         if(stage_spawn_cached_fighter(&fighters[slot],cache,roster,true,2,x,z,1,slot,hp,500)<0){

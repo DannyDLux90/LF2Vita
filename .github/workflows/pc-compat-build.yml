@@ -1,0 +1,64 @@
+name: PC Compatibility Build
+
+on:
+  push:
+    branches:
+      - pc-compat-wip
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pc-compat-wip-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: vitasdk/vitasdk:2026.08-20260813
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          echo "VITASDK=$VITASDK"
+          arm-vita-eabi-gcc --version
+          cmake --version
+
+      - name: Test native AdHoc protocol
+        run: python3 tools/test_adhoc_protocol.py
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Build ELF and SELF
+        run: cmake --build build --target eboot.bin-self --parallel 2
+
+      - name: Verify outputs
+        run: |
+          test -s build/lf2vita
+          test -s build/lf2vita.velf
+          test -s build/eboot.bin
+
+      - name: Package source and workspace
+        if: always()
+        run: |
+          rm -rf artifact_bundle
+          mkdir -p artifact_bundle/source artifact_bundle/workspace
+          tar --exclude='./.git' --exclude='./build' --exclude='./artifact_bundle' --exclude='./LF2Vita-source-workspace-*' -cf - . | tar -xf - -C artifact_bundle/source
+          if [ -d build ]; then cp -a build artifact_bundle/workspace/build; fi
+          printf 'branch=pc-compat-wip\ncommit=%s\nworkflow_run=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > artifact_bundle/workspace/BUILD_INFO.txt
+          cmake -E tar cf "LF2Vita-source-workspace-${GITHUB_SHA}.zip" --format=zip -- artifact_bundle
+
+      - name: Upload source and workspace ZIP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lf2vita-source-workspace-${{ github.sha }}
+          path: LF2Vita-source-workspace-${{ github.sha }}.zip
+          if-no-files-found: error
+          retention-days: 7

@@ -1,4 +1,3 @@
-
 typedef struct { const char *name; const char *asset; } stage_entry_t;
 static const stage_entry_t g_stages[] = {
  {"Stanley Prison",    "app0:/assets/stages/00_sp.png"},

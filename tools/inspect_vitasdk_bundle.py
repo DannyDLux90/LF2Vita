@@ -40,7 +40,7 @@ def iter_ar_members(blob: bytes):
         if offset + 60 > len(blob):
             raise ValueError("Truncated ar header")
         header = blob[offset:offset + 60]
-        if header[58:60] != b"\\x60\n":
+        if header[58:60] != b"\x60\n":
             raise ValueError("Invalid ar header")
         try:
             size = int(header[48:58].strip())

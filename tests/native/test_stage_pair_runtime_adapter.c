@@ -3,6 +3,7 @@
  * All world-coordinate candidates are checked against a narrow-phase oracle.
  */
 #include <math.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -132,6 +133,28 @@ static void generate(fighter_t *a, fighter_t *b) {
 int main(void) {
     fighter_t *a=calloc(1,sizeof(*a)),*b=calloc(1,sizeof(*b));
     if(!a||!b)return 3;
+    /* No call to the production-style int arithmetic on overflowing DAT. */
+    generate(a,b);
+    a->held_oid=0;
+    a->x=0.f;a->y=0.f;
+    a->def.frames[a->frame].centerx=0;
+    a->def.frames[a->frame].itr_count=1;
+    a->def.frames[a->frame].itrs[0]=(lf2_itr_def_t){
+        .kind=0,.x=INT_MAX-10,.y=0,.w=100,.h=10};
+    if(lf2_stage_pair_runtime_may_contact(a,b)!=1){
+        fprintf(stderr,"Expected fail-open for attacker coordinate overflow\n");
+        return 3;
+    }
+    generate(a,b);
+    a->held_oid=0;b->x=0.f;b->y=0.f;
+    b->def.frames[b->frame].centerx=0;
+    b->def.frames[b->frame].bdy_count=1;
+    b->def.frames[b->frame].bdys[0]=(lf2_bdy_def_t){
+        .x=INT_MAX-10,.y=0,.w=100,.h=10};
+    if(lf2_stage_pair_runtime_may_contact(a,b)!=1){
+        fprintf(stderr,"Expected fail-open for target coordinate overflow\n");
+        return 3;
+    }
     unsigned rejected=0,possible=0,weapon=0;
     for(int n=0;n<100000;n++){
         generate(a,b);

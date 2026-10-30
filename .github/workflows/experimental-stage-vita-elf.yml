@@ -1,0 +1,40 @@
+name: Experimental Stage broadphase Vita ELF smoke build
+
+on:
+  push:
+    branches:
+      - experiment/round33-vita-stage-broadphase-compile
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vita-elf:
+    runs-on: ubuntu-latest
+    container:
+      image: vitasdk/vitasdk:2026.08
+    env:
+      VITASDK: /usr/local/vitasdk
+    steps:
+      - name: Checkout historical source branch
+        uses: actions/checkout@v4
+      - name: Inspect pinned VitaSDK
+        shell: bash
+        run: |
+          export PATH="$VITASDK/bin:$PATH"
+          arm-vita-eabi-gcc --version | head -n 1
+          test -f "$VITASDK/share/vita.toolchain.cmake"
+      - name: Configure asset-free ELF-only target
+        shell: bash
+        run: |
+          export PATH="$VITASDK/bin:$PATH"
+          cmake -S . -B /tmp/lf2vita-compile -DCMAKE_BUILD_TYPE=Release -DLF2_ELF_ONLY=ON -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
+      - name: Compile and link actual historical Vita engine
+        shell: bash
+        run: |
+          export PATH="$VITASDK/bin:$PATH"
+          cmake --build /tmp/lf2vita-compile --target lf2vita --parallel 2
+      - name: Confirm ELF exists (no VPK created)
+        shell: bash
+        run: test -s /tmp/lf2vita-compile/lf2vita

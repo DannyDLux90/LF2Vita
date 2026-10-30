@@ -25,9 +25,21 @@ wenn die Rechteckvereinigungen sicher disjunkt sind.
   1/3 nur bei authored Catch-Action). Der Sonderfall einer **gehaltenen
   Waffe** muss seinen tatsächlichen ausgerichteten world-`wpoint` und
   alle für den Treffer relevanten Waffenregionen in den Bereich aufnehmen.
-- Ziel-Bounds vereinen **alle aktuellen BDYs**. Sonderzustände, in denen
-  die Trefferwirkung nicht auf den errechneten Bereichen beruht, müssen
-  konservativ `complete=0` setzen.
+- Ziel-Bounds vereinen **alle aktuellen BDYs**. **Neu überprüfter
+  PC-Sonderfall:** Ein normaler Schlag in Frame 60/65 kann eine passive
+  **ITR kind 6** berühren und dadurch auf Frame 70 (*Super-Punch*)
+  umschalten, **ohne dass sich ITR und normale BDY überlappen**.
+  Daher müssen für diesen Angreifer auch sämtliche kind-6-Rechtecke
+  des Zieles als zusätzliche Kontaktmöglichkeit berücksichtigt werden
+  (API: `lf2_pair_may_contact_with_passive`). Der Kind-6-Treffer
+  bleibt trotzdem passiv und darf nicht selbst als Angriff wirken.
+- Gehaltene Waffen haben eine eigene, früher ausgeführte Kollision
+  `apply_held_weapon_hit`; wenn deren world-space-`wpoint`-Transformation
+  nicht vollständig eingerechnet ist, **Angreifer-Bounds als
+  `complete=0` markieren**, sodass der Originalcode ungekürzt läuft
+  (`lf2_pair_bounds_uncertain`).
+- Sonderzustände, in denen die Trefferwirkung nicht auf den errechneten
+  Bereichen beruht, müssen ebenfalls konservativ `complete=0` setzen.
 - Position, Facing, Frame, held_oid, weaponact, Klonstatus und ähnliche
   für Weltregionen relevante Daten **können während der Paarfolge wechseln**.
   Deshalb müssen die Bounds vor ihrer Verwendung aktuell sein.
@@ -62,13 +74,15 @@ wenn die Rechteckvereinigungen sicher disjunkt sind.
 - `tools/lf2_stage_pair_bounds.h` – konservative Bounds, niemals in
   Produktionscode inkludiert.
 - `tests/native/test_stage_pair_bounds.c` – 1.800 synthetische Szenen
-  (8, 40, 72 Figuren), Referenz und Kandidat mit gleicher Reihenfolge,
-  Treffermutationen, Gleichheit des Ereignishashes und Actor-Zustands.
+  (8, 40, 72 Figuren), inklusive passiver kind-6-Super-Punch-Ereignisse,
+  unvollständiger Waffenbereiche, Statusmutationen, gleicher Reihenfolge,
+  identischen Ereignishashes und Actor-Zuständen.
 - GitHub Actions: normale GCC-Kompilierung und UBSan-Ausführung.
 - Der ursprüngliche Round-27-Filter für passive ITRs ist weiterhin die
   separate produktive Änderung und wird durch diesen Prototyp nicht ersetzt.
 
-**Gemessener Host-Testbefund:** 1.996.514 von 3.402.822
-potenziellen Narrow-Phase-Paarprüfungen werden in synthetischen Szenen
+**Gemessener Host-Testbefund nach Ergänzung der Sonderfälle:**
+1.903.983 von 3.399.592 potenziellen Narrow-Phase-Paarprüfungen
+werden in synthetischen Szenen
 ausgespart, mit identischen modellierten Treffern. Dieser Wert ist
 **nicht** auf LF2-Originaldaten und **nicht** auf Vita-FPS übertragbar.

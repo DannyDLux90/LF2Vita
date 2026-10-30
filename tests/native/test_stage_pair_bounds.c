@@ -14,10 +14,11 @@
 
 typedef struct { int x,y,w,h; } rect_t;
 typedef struct {
-    int enabled, damage, hits;
-    int na,nb;
-    rect_t atk[MAX_REGIONS], body[MAX_REGIONS];
-    lf2_pair_bounds_t aabb_atk, aabb_body;
+    int enabled, damage, hits, super_punches, can_super;
+    int uncertain_attack, uncertain_target;
+    int na,nb,np;
+    rect_t atk[MAX_REGIONS], body[MAX_REGIONS], passive[MAX_REGIONS];
+    lf2_pair_bounds_t aabb_atk, aabb_body, aabb_passive;
 } actor_t;
 
 static uint32_t state=0x1833beafu;
@@ -41,6 +42,7 @@ static int narrow_rect_overlap(rect_t a, rect_t b) {
 static void update_aabb(actor_t *a) {
     a->aabb_atk=lf2_pair_bounds_begin();
     a->aabb_body=lf2_pair_bounds_begin();
+    a->aabb_passive=lf2_pair_bounds_begin();
     for (int i=0;i<a->na;i++) {
         rect_t r=a->atk[i];
         lf2_pair_bounds_add(&a->aabb_atk,r.x,r.y,r.w,r.h);
@@ -48,6 +50,15 @@ static void update_aabb(actor_t *a) {
     for (int i=0;i<a->nb;i++) {
         rect_t r=a->body[i];
         lf2_pair_bounds_add(&a->aabb_body,r.x,r.y,r.w,r.h);
+    }
+    for (int i=0;i<a->np;i++) {
+        rect_t r=a->passive[i];
+        lf2_pair_bounds_add(&a->aabb_passive,r.x,r.y,r.w,r.h);
+    }
+    if (a->uncertain_attack) lf2_pair_bounds_uncertain(&a->aabb_atk);
+    if (a->uncertain_target) {
+        lf2_pair_bounds_uncertain(&a->aabb_body);
+        lf2_pair_bounds_uncertain(&a->aabb_passive);
     }
 }
 static uint64_t mix(uint64_t h,uint64_t v) {
@@ -69,14 +80,34 @@ static run_t run_scene(actor_t *fighters,int n,int optimized) {
         if (!fighters[a].enabled) continue;
         for (int b=0;b<n;b++) {
             if (a==b || !fighters[b].enabled) continue;
-            if (optimized && !lf2_pair_may_contact(&fighters[a].aabb_atk,
-                                                   &fighters[b].aabb_body)) {
+            const lf2_pair_bounds_t *passive=
+                fighters[a].can_super ? &fighters[b].aabb_passive : NULL;
+            if (optimized && !lf2_pair_may_contact_with_passive(
+                    &fighters[a].aabb_atk,&fighters[b].aabb_body,passive)) {
                 result.skipped_pairs++;
                 continue;
             }
             result.narrow_calls++;
             int hit=0;
             for (int i=0;i<fighters[a].na && !hit;i++) {
+                /* Stock LF2 frame 60/65: kind-6 passive region may produce
+                 * frame-70 transition WITHOUT a body-region collision. */
+                if (fighters[a].can_super) {
+                    for (int p=0;p<fighters[b].np;p++) {
+                        if (!narrow_rect_overlap(fighters[a].atk[i],
+                                                 fighters[b].passive[p])) continue;
+                        result.events++;
+                        result.hash=mix(result.hash,(uint64_t)(a+1)*257+(b+1));
+                        result.hash=mix(result.hash,UINT64_C(0x60000)+(uint64_t)(i+1)*257+(p+1));
+                        fighters[a].super_punches++;
+                        fighters[a].can_super=0;
+                        fighters[a].atk[i].x+=7; /* simulate frame transition */
+                        update_aabb(&fighters[a]);
+                        hit=1;
+                        break;
+                    }
+                }
+                if (hit) break;
                 for (int j=0;j<fighters[b].nb;j++) {
                     if (!narrow_rect_overlap(fighters[a].atk[i],
                                             fighters[b].body[j])) continue;
@@ -129,12 +160,32 @@ static void test_bounds_corners(void) {
     a.complete=0;
     check(lf2_pair_may_contact(&a,&b),"uncertain attacker fails open");
     check(lf2_pair_may_contact(NULL,&b),"missing attacker fails open");
+
+    /* A normal punch can transition into super-punch without touching BDY. */
+    lf2_pair_bounds_t punch=lf2_pair_bounds_begin();
+    lf2_pair_bounds_t body=lf2_pair_bounds_begin();
+    lf2_pair_bounds_t passive=lf2_pair_bounds_begin();
+    lf2_pair_bounds_add(&punch,0,0,20,20);
+    lf2_pair_bounds_add(&body,500,500,20,20);
+    lf2_pair_bounds_add(&passive,10,10,5,5);
+    check(!lf2_pair_may_contact(&punch,&body),"ordinary body bounds disjoint");
+    check(lf2_pair_may_contact_with_passive(&punch,&body,&passive),
+          "passive ITR kind 6 can trigger super punch");
+    check(!lf2_pair_may_contact_with_passive(&punch,&body,NULL),
+          "non-super attacker still culls disjoint body");
+    lf2_pair_bounds_uncertain(&punch);
+    check(lf2_pair_may_contact_with_passive(&punch,&body,NULL),
+          "held weapon with uncertain geometry fails open");
 }
 static void random_actor(actor_t *a) {
     memset(a,0,sizeof(*a));
     a->enabled=randbetween(0,11)!=0;
     a->na=randbetween(0,MAX_REGIONS);
     a->nb=randbetween(0,MAX_REGIONS);
+    a->np=randbetween(0,2);
+    a->can_super=randbetween(0,7)==0;
+    a->uncertain_attack=randbetween(0,29)==0; /* also models held weapon */
+    a->uncertain_target=randbetween(0,29)==0;
     int centerx=randbetween(-1800,1800);
     int centery=randbetween(-230,230);
     for (int k=0;k<a->na;k++) {
@@ -147,14 +198,34 @@ static void random_actor(actor_t *a) {
                             centery+randbetween(-80,80),
                             randbetween(1,100),randbetween(1,120)};
     }
+    for (int k=0;k<a->np;k++) {
+        a->passive[k]=(rect_t){centerx+randbetween(-250,250),
+                               centery+randbetween(-150,150),
+                               randbetween(1,120),randbetween(1,100)};
+    }
     update_aabb(a);
-    /* Some authored or runtime regions cannot be bounded confidently.
-     * Candidate must NOT cull them. */
-    if (randbetween(0,29)==0) a->aabb_atk.complete=0;
-    if (randbetween(0,29)==0) a->aabb_body.complete=0;
 }
 int main(void) {
     test_bounds_corners();
+    /* Regression: first actor touches only a passive kind-6 region.
+     * The old body-only spatial filter would lose this event. */
+    actor_t basic[2]={{0}};
+    basic[0].enabled=basic[1].enabled=1;
+    basic[0].can_super=1;
+    basic[0].na=1;basic[0].atk[0]=(rect_t){0,0,20,20};
+    basic[1].nb=1;basic[1].body[0]=(rect_t){500,500,20,20};
+    basic[1].np=1;basic[1].passive[0]=(rect_t){10,10,5,5};
+    update_aabb(&basic[0]);update_aabb(&basic[1]);
+    actor_t reference_scene[2],optimized_scene[2];
+    memcpy(reference_scene,basic,sizeof(basic));
+    memcpy(optimized_scene,basic,sizeof(basic));
+    run_t reference_special=run_scene(reference_scene,2,0);
+    run_t optimized_special=run_scene(optimized_scene,2,1);
+    check(reference_special.events==1 &&
+          reference_special.events==optimized_special.events &&
+          reference_special.hash==optimized_special.hash &&
+          optimized_scene[0].super_punches==1,
+          "super-punch on passive ITR preserved without BDY contact");
     actor_t *slow=calloc(MAX_ACTORS,sizeof(*slow));
     actor_t *fast=calloc(MAX_ACTORS,sizeof(*fast));
     if(!slow||!fast){fprintf(stderr,"allocation failure\n");return 1;}
@@ -174,8 +245,11 @@ int main(void) {
         for (int i=0;i<n;i++) {
             if (slow[i].damage!=fast[i].damage||
                 slow[i].hits!=fast[i].hits ||
+                slow[i].super_punches!=fast[i].super_punches ||
+                slow[i].can_super!=fast[i].can_super ||
                 memcmp(slow[i].body,fast[i].body,sizeof(slow[i].body))!=0||
-                memcmp(slow[i].atk,fast[i].atk,sizeof(slow[i].atk))!=0) {
+                memcmp(slow[i].atk,fast[i].atk,sizeof(slow[i].atk))!=0 ||
+                memcmp(slow[i].passive,fast[i].passive,sizeof(slow[i].passive))!=0) {
                 fprintf(stderr,"ACTOR STATE MISMATCH scene=%d slot=%d\n",scene,i);
                 return 2;
             }
@@ -184,7 +258,7 @@ int main(void) {
         baseline_calls+=reference.narrow_calls;
     }
     check(pruned>0,"some disjoint candidate pairs skipped");
-    printf("PASS 1800 synthetic scenes (8/40/72 fighters), identical contact event/order/state; "
+    printf("PASS 1800 synthetic scenes (8/40/72 fighters), including passive super-punch events and uncertain-weapon fallback, identical contact event/order/state; "
            "pruned %llu/%llu potential narrow-phase calls. NOT integrated.\n",
            pruned,baseline_calls);
     free(slow);free(fast);

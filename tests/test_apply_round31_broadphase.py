@@ -82,5 +82,52 @@ class StagePatcherTest(unittest.TestCase):
                 patcher.prepare(root)
 
 
+    def test_undo_roundtrip_enabled_and_disabled(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as tmp:
+                root = self.make_workspace(tmp)
+                original_game = (root / "src/game.c").read_bytes()
+                original_stage = (root / "src/fix3/game_24.inc").read_bytes()
+                pending = patcher.prepare(root, enable=enabled)
+                for path, payload in pending.items():
+                    Path(path).write_bytes(payload)
+                undo = patcher.prepare_undo(root)
+                self.assertEqual(len(undo), 4)
+                self.assertIsNone(undo[str(root / "src/fix3/lf2_stage_pair_runtime.inc")])
+                self.assertEqual(undo[str(root / "src/game.c")], original_game)
+                self.assertEqual(undo[str(root / "src/fix3/game_24.inc")], original_stage)
+                for path, payload in undo.items():
+                    if payload is None:
+                        Path(path).unlink()
+                    else:
+                        Path(path).write_bytes(payload)
+                self.assertEqual((root / "src/game.c").read_bytes(), original_game)
+                self.assertEqual((root / "src/fix3/game_24.inc").read_bytes(), original_stage)
+                self.assertEqual(patcher.prepare_undo(root), {})
+
+    def test_undo_refuses_user_modified_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.make_workspace(tmp)
+            for path, payload in patcher.prepare(root).items():
+                Path(path).write_bytes(payload)
+            header = root / "src/fix3/lf2_stage_pair_bounds.h"
+            header.write_bytes(header.read_bytes() + b"\n/* local edit */\n")
+            original_game = (root / "src/game.c").read_bytes()
+            with self.assertRaises(ValueError):
+                patcher.prepare_undo(root)
+            self.assertEqual((root / "src/game.c").read_bytes(), original_game)
+
+    def test_undo_refuses_foreign_stage_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.make_workspace(tmp)
+            for path, payload in patcher.prepare(root).items():
+                Path(path).write_bytes(payload)
+            stage = root / "src/fix3/game_24.inc"
+            stage.write_text(stage.read_text().replace(
+                patcher.GUARDED, "if(foreign_condition())" + patcher.GUARDED))
+            with self.assertRaises(ValueError):
+                patcher.prepare_undo(root)
+
+
 if __name__ == "__main__":
     unittest.main()

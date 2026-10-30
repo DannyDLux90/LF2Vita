@@ -48,5 +48,28 @@ jobs:
           /tmp/lf2_stage_adapter_test
       - name: Test Round-27 source integration patcher against historic tree
         run: python3 -m unittest discover -s tests -p 'test_apply_round31_broadphase.py' -v
+      - name: Real historical source-branch dry-run, install, enable and exact undo
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin refs/heads/pc-compat-round6-pc-fidelity:refs/remotes/origin/pc-compat-round6-pc-fidelity
+          mkdir -p "$RUNNER_TEMP/lf2-historical-source"
+          git archive refs/remotes/origin/pc-compat-round6-pc-fidelity | tar -x -C "$RUNNER_TEMP/lf2-historical-source"
+          ROOT="$RUNNER_TEMP/lf2-historical-source"
+          sha256sum "$ROOT/src/game.c" "$ROOT/src/fix3/game_24.inc" | sed "s#$ROOT/##g" > "$RUNNER_TEMP/before.sha"
+          python3 tools/apply_round31_broadphase.py "$ROOT"
+          python3 tools/apply_round31_broadphase.py "$ROOT" --apply
+          python3 tools/apply_round31_broadphase.py "$ROOT" --apply --enable
+          grep -q '^#define LF2_STAGE_BROADPHASE_ENABLED 1
+
+
+ "$ROOT/src/game.c"
+          python3 tools/apply_round31_broadphase.py "$ROOT" --undo --apply
+          test ! -f "$ROOT/src/fix3/lf2_stage_pair_runtime.inc"
+          test ! -f "$ROOT/src/fix3/lf2_stage_pair_bounds.h"
+          sha256sum "$ROOT/src/game.c" "$ROOT/src/fix3/game_24.inc" | sed "s#$ROOT/##g" > "$RUNNER_TEMP/after.sha"
+          diff -u "$RUNNER_TEMP/before.sha" "$RUNNER_TEMP/after.sha"
+          echo 'PASS historical real-source install -> enable -> exact byte-for-byte undo (not Round-27 build)'
+
 
 

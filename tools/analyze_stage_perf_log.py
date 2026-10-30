@@ -15,10 +15,10 @@ import re
 import statistics
 from pathlib import Path
 
-STAMP = re.compile(r"^\\[(\\d+) ms\\]")
-PERF = re.compile(r"\\bPERF\\s+stage\\s+")
-FIELD = re.compile(r"([a-z_]+)=(-?\\d+(?:\\.\\d+)?)")
-CDRAM = re.compile(r"\\bcdram=(\\d+)")
+STAMP = re.compile(r"^\[(\d+) ms\]")
+PERF = re.compile(r"\bPERF\s+stage\s+")
+FIELD = re.compile(r"([a-z_]+)=(-?\d+(?:\.\d+)?)")
+CDRAM = re.compile(r"\bcdram=(\d+)")
 TRANSITION_MARKERS = (
     "stage:transition_snapshot",
     "stage:wave_advance",

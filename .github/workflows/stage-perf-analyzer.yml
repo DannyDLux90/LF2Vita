@@ -6,6 +6,8 @@ on:
       - tools/analyze_stage_perf_log.py
       - tools/inspect_vitasdk_bundle.py
       - tests/test_inspect_vitasdk_bundle.py
+      - tools/lf2_stage_pair_bounds.h
+      - tests/native/test_stage_pair_bounds.c
       - tests/test_analyze_stage_perf_log.py
       - .github/workflows/stage-perf-analyzer.yml
   push:
@@ -23,3 +25,7 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_analyze_stage_perf_log.py' -v
       - name: Run offline VitaSDK bundle inspector regression tests
         run: python3 -m unittest discover -s tests -p 'test_inspect_vitasdk_bundle.py' -v
+      - name: Build and compare conservative Stage broad-phase against reference
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Itools tests/native/test_stage_pair_bounds.c -o /tmp/lf2_pair_bounds_test
+          /tmp/lf2_pair_bounds_test

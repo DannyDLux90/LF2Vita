@@ -90,6 +90,44 @@ class PerfLogTest(unittest.TestCase):
         self.assertTrue(third["clean_window"])
 
 
+    def test_baseline_comparison_restricts_to_clean_equal_enemy_bins(self):
+        older = """[0000001000 ms] PERF stage fps=45 logic_hz=22 enemies=40 logic_us_per_tu=20000
+[0000009000 ms] PERF stage fps=55 logic_hz=28 enemies=40 logic_us_per_tu=10000
+[0000015000 ms] PERF stage fps=60 logic_hz=30 enemies=1 logic_us_per_tu=1000
+"""
+        newer = """[0000001000 ms] PERF stage fps=50 logic_hz=25 enemies=40 logic_us_per_tu=15000
+[0000009000 ms] PERF stage fps=60 logic_hz=30 enemies=40 logic_us_per_tu=9000
+[0000015000 ms] PERF stage fps=59 logic_hz=30 enemies=1 logic_us_per_tu=1000
+"""
+        before = analyzer.parse_log(older)
+        after = analyzer.parse_log(newer)
+        comparison = analyzer.compare_runs(before, after, min_samples=2)
+        heavy = comparison["bins"]["31-40"]
+        self.assertEqual(heavy["status"], "exploratory_only")
+        self.assertEqual(heavy["metrics"]["fps"]["baseline_mean"], 50)
+        self.assertEqual(heavy["metrics"]["fps"]["candidate_mean"], 55)
+        self.assertEqual(heavy["metrics"]["fps"]["delta_percent"], 10)
+        self.assertEqual(comparison["bins"]["0-10"]["status"], "insufficient_samples")
+        self.assertFalse(comparison["controlled_benchmark"])
+        with self.assertRaises(ValueError):
+            analyzer.compare_runs(before, after, min_samples=0)
+
+    def test_baseline_comparison_excludes_transition_intervals(self):
+        older = """[0000001000 ms] INFO loading textures char=Bandit sheets=4
+[0000001100 ms] PERF stage fps=10 logic_hz=10 enemies=40
+[0000010000 ms] PERF stage fps=50 logic_hz=26 enemies=40
+"""
+        newer = """[0000001000 ms] PERF stage fps=60 logic_hz=30 enemies=40
+[0000009000 ms] PERF stage fps=60 logic_hz=30 enemies=40
+"""
+        comparison = analyzer.compare_runs(analyzer.parse_log(older),
+                                           analyzer.parse_log(newer), min_samples=1)
+        heavy = comparison["bins"]["31-40"]
+        self.assertEqual(heavy["baseline_samples"], 1)
+        self.assertEqual(heavy["candidate_samples"], 2)
+        self.assertEqual(heavy["metrics"]["fps"]["baseline_mean"], 50)
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -23,14 +23,16 @@ class StagePatcherTest(unittest.TestCase):
         (root / "src/fix3").mkdir(parents=True, exist_ok=True)
         for relative in ("src/game.c", "src/fix3/game_24.inc"):
             (root / relative).write_bytes((REPO / relative).read_bytes())
-        # GitHub main is older than the local Round-27 split; its game.c
-        # deliberately lacks the top-level stock wrapper boundary.
-        # This fixture emulates the later #undef established in Round 6+.
+        # GitHub main is older than the local Round-27 split. Model the
+        # documented top-level boundary AFTER game_02_prefix, not the
+        # #undef apply_hits site inside the open draw function.
         gamec = root / "src/game.c"
         source = gamec.read_text()
         source = source.replace(
-            '#include "fix3/game_15.inc"\n',
-            '#include "fix3/game_15.inc"\n#undef apply_hits\n', 1)
+            '#include "fix3/game_02.inc"\n',
+            '#include "fix3/game_02_prefix.inc"\n'
+            '#undef in_action\n'
+            '#include "fix3/game_02_suffix.inc"\n', 1)
         gamec.write_text(source)
         return root
 

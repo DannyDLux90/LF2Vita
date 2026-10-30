@@ -2,7 +2,7 @@
 """Analyze LF2 Vita PERF records without modifying the game or importing VitaSDK.
 
 Example:
-    python3 tools/analyze_stage_perf_log.py lf2.log --json report.json --csv samples.csv
+    python3 tools/analyze_stage_perf_log.py lf2.log --baseline older_lf2.log --json report.json --csv samples.csv
 
 "load/transition nearby" means temporal overlap, NOT established causation.
 The last reported CDRAM figure may be stale; detailed profiler fields are
@@ -151,6 +151,50 @@ def report(parsed: dict) -> dict:
                 key=lambda r: (r.get("logic_hz", 999), r["time_ms"]))[:8]}
 
 
+
+def compare_runs(baseline: dict, candidate: dict, min_samples: int = 3) -> dict:
+    """Exploratory A/B comparison, matched only by enemy count and clean windows.
+
+    NOT a controlled benchmark: input actions, scene, randomness, and stage
+    states can differ even when the number of enemies is identical.
+    """
+    if min_samples < 1:
+        raise ValueError("min_samples must be at least 1")
+    result = {"method": "same_enemy_bin_clean_windows_only",
+              "controlled_benchmark": False,
+              "minimum_samples_per_run": min_samples,
+              "bins": {}}
+    for low, high in BINS:
+        key = f"{low}-{high}" if high < 99999 else f"{low}+"
+        reference = [row for row in baseline["samples"]
+                     if row["clean_window"] and low <= row["enemies"] <= high]
+        current = [row for row in candidate["samples"]
+                   if row["clean_window"] and low <= row["enemies"] <= high]
+        comparison = {"baseline_samples": len(reference),
+                      "candidate_samples": len(current),
+                      "status": "insufficient_samples"}
+        if len(reference) >= min_samples and len(current) >= min_samples:
+            comparison["status"] = "exploratory_only"
+            comparisons = {}
+            for metric in METRICS:
+                old = [r[metric] for r in reference if metric in r]
+                new = [r[metric] for r in current if metric in r]
+                if len(old) < min_samples or len(new) < min_samples:
+                    continue
+                previous, following = statistics.fmean(old), statistics.fmean(new)
+                comparisons[metric] = {
+                    "baseline_mean": round(previous, 3),
+                    "candidate_mean": round(following, 3),
+                    "delta": round(following - previous, 3),
+                    "delta_percent": (
+                        round(100 * (following - previous) / previous, 2)
+                        if previous != 0 else None),
+                }
+            comparison["metrics"] = comparisons
+        result["bins"][key] = comparison
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path, help="LF2 Vita lf2.log")
@@ -158,11 +202,19 @@ def main() -> None:
                         help="lookback interval for load/transition flags (default: 5000)")
     parser.add_argument("--json", type=Path, help="write machine-readable summary")
     parser.add_argument("--csv", type=Path, help="write all individual PERF samples")
+    parser.add_argument("--baseline", type=Path, help="optional older Vita log for exploratory A/B comparison")
+    parser.add_argument("--min-comparison-samples", type=int, default=3, help="minimum clean samples per bin per run")
     args = parser.parse_args()
     if args.nearby_ms < 0:
         parser.error("--nearby-ms must be nonnegative")
+    if args.min_comparison_samples < 1:
+        parser.error("--min-comparison-samples must be positive")
     parsed = parse_log(args.log.read_text(encoding="utf-8", errors="replace"), args.nearby_ms)
     result = report(parsed)
+    if args.baseline:
+        before = parse_log(args.baseline.read_text(encoding="utf-8", errors="replace"),
+                           args.nearby_ms)
+        result["comparison"] = compare_runs(before, parsed, args.min_comparison_samples)
     summary = json.dumps(result, indent=2, ensure_ascii=False)
     print(summary)
     if args.json:

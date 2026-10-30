@@ -50,13 +50,30 @@ static inline int lf2_stage_region_is_int_safe(
         fabsf(f->x)>1000000.f || fabsf(f->y)>1000000.f)
         return 0;
     const int64_t px=(int)f->x,py=(int)f->y;
-    const int64_t wx=!f->facing ?
-        px-(int64_t)frame->centerx+rx :
-        px+1+(int64_t)frame->centerx-rw-rx;
-    const int64_t wy=py-(int64_t)frame->centery+ry;
-    return wx>=INT_MIN && wx<=INT_MAX &&
-           wy>=INT_MIN && wy<=INT_MAX &&
-           wx+(int64_t)rw<=INT_MAX &&
+    /* Mirror the original int expression one operation at a time.
+       Testing only the final 64-bit result is NOT sufficient: an
+       intermediate int may overflow and later cancel back into range. */
+    int64_t wx=px;
+    if (!f->facing) {
+        wx-=(int64_t)frame->centerx;
+        if (wx<INT_MIN || wx>INT_MAX) return 0;
+        wx+=(int64_t)rx;
+        if (wx<INT_MIN || wx>INT_MAX) return 0;
+    } else {
+        wx+=1;
+        if (wx<INT_MIN || wx>INT_MAX) return 0;
+        wx+=(int64_t)frame->centerx;
+        if (wx<INT_MIN || wx>INT_MAX) return 0;
+        wx-=(int64_t)rw;
+        if (wx<INT_MIN || wx>INT_MAX) return 0;
+        wx-=(int64_t)rx;
+        if (wx<INT_MIN || wx>INT_MAX) return 0;
+    }
+    int64_t wy=py-(int64_t)frame->centery;
+    if (wy<INT_MIN || wy>INT_MAX) return 0;
+    wy+=(int64_t)ry;
+    if (wy<INT_MIN || wy>INT_MAX) return 0;
+    return wx+(int64_t)rw<=INT_MAX &&
            wy+(int64_t)rh<=INT_MAX;
 }
 

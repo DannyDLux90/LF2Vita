@@ -1,0 +1,21 @@
+name: Stage performance log analyzer (host tests)
+
+on:
+  pull_request:
+    paths:
+      - tools/analyze_stage_perf_log.py
+      - tests/test_analyze_stage_perf_log.py
+      - .github/workflows/stage-perf-analyzer.yml
+  push:
+    branches:
+      - tooling/round28-stage-perf-audit
+
+jobs:
+  host-analyzer:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run standard-library-only analyzer regression tests
+        run: python3 -m unittest discover -s tests -p 'test_analyze_stage_perf_log.py' -v

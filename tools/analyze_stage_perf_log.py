@@ -5,10 +5,14 @@ Example:
     python3 tools/analyze_stage_perf_log.py lf2.log --json report.json --csv samples.csv
 
 "load/transition nearby" means temporal overlap, NOT established causation.
+The last reported CDRAM figure may be stale; detailed profiler fields are
+only available in Round-27-or-later logs. Slow-with-low-measured-work is a
+diagnostic flag, never proof of a texture-loading stall.
 """
 from __future__ import annotations
 
 import argparse
+from bisect import bisect_right
 import csv
 import json
 import re
@@ -19,6 +23,7 @@ STAMP = re.compile(r"^\[(\d+) ms\]")
 PERF = re.compile(r"\bPERF\s+stage\s+")
 FIELD = re.compile(r"([a-z_]+)=(-?\d+(?:\.\d+)?)")
 CDRAM = re.compile(r"\bcdram=(\d+)")
+PHASE = re.compile(r"\bphase=(\d+)/(\d+)")
 TRANSITION_MARKERS = (
     "stage:transition_snapshot",
     "stage:wave_advance",
@@ -30,7 +35,7 @@ TRANSITION_MARKERS = (
 BINS = ((0, 10), (11, 20), (21, 30), (31, 40), (41, 99999))
 METRICS = (
     "fps", "logic_hz", "logic_us_per_tu", "draw_us_per_frame",
-    "ai_us_per_tu", "objects_us_per_tu", "hits_us_per_tu",
+    "ai_us_per_tu", "objects_us_per_tu", "hits_us_per_tu", "other_us_per_tu",
 )
 
 
@@ -39,6 +44,7 @@ def parse_log(text: str, nearby_ms: int = 5000) -> dict:
     perf_rows: list[dict] = []
     events: list[tuple[int, str]] = []
     cdram_values: list[int] = []
+    cdram_events: list[tuple[int, int]] = []
     for line in text.splitlines():
         match = STAMP.match(line)
         if match is None:
@@ -46,21 +52,56 @@ def parse_log(text: str, nearby_ms: int = 5000) -> dict:
         timestamp = int(match.group(1))
         cdram = CDRAM.search(line)
         if cdram:
-            cdram_values.append(int(cdram.group(1)))
+            value = int(cdram.group(1))
+            cdram_values.append(value)
+            cdram_events.append((timestamp, value))
         if PERF.search(line):
             row = {"time_ms": timestamp}
             for field, raw in FIELD.findall(line):
                 row[field] = float(raw)
+            phase = PHASE.search(line)
+            if phase:
+                row["phase_index"], row["phase_total"] = int(phase.group(1)), int(phase.group(2))
+                row.pop("phase", None)  # Avoid parsing '13/21' as a bogus float.
+            components = ("ai_us_per_tu", "objects_us_per_tu", "hits_us_per_tu")
+            if "logic_us_per_tu" in row and all(key in row for key in components):
+                remaining = row["logic_us_per_tu"] - sum(row[key] for key in components)
+                # A negative remainder indicates overlapping/misaligned timers,
+                # not negative work; leave it unreported.
+                if remaining >= 0:
+                    row["other_us_per_tu"] = round(remaining, 2)
             if "enemies" in row and "logic_hz" in row and "fps" in row:
                 perf_rows.append(row)
         if any(marker in line for marker in TRANSITION_MARKERS):
             kind = "texture_load" if "loading textures char=" in line else "stage_transition"
             events.append((timestamp, kind))
+    # Indexed lookups avoid scanning every texture event for every PERF sample.
+    event_times = {
+        kind: sorted(stamp for stamp, observed_kind in events if observed_kind == kind)
+        for kind in ("texture_load", "stage_transition")
+    }
+    cdram_events.sort()
+    cdram_times = [stamp for stamp, _ in cdram_events]
     for row in perf_rows:
-        relevant = {kind for stamp, kind in events if 0 <= row["time_ms"] - stamp <= nearby_ms}
-        row["texture_load_nearby"] = "texture_load" in relevant
-        row["stage_transition_nearby"] = "stage_transition" in relevant
-        row["clean_window"] = not relevant
+        for kind, flag in (("texture_load", "texture_load_nearby"),
+                           ("stage_transition", "stage_transition_nearby")):
+            stamps = event_times[kind]
+            index = bisect_right(stamps, row["time_ms"]) - 1
+            row[flag] = (index >= 0 and
+                         row["time_ms"] - stamps[index] <= nearby_ms)
+            row[f"ms_since_{kind}"] = (
+                row["time_ms"] - stamps[index] if index >= 0 else None)
+        row["clean_window"] = not (
+            row["texture_load_nearby"] or row["stage_transition_nearby"])
+        index = bisect_right(cdram_times, row["time_ms"]) - 1
+        row["last_reported_cdram_bytes"] = cdram_events[index][1] if index >= 0 else None
+        # The following are triage indicators, NOT a diagnosis of root cause.
+        row["logic_under_25_hz"] = row["logic_hz"] < 25.0
+        row["measured_logic_over_budget"] = (
+            row.get("logic_us_per_tu", 0.0) > 1000000.0 / 30.0)
+        row["slow_with_low_measured_logic_cost"] = (
+            row["logic_under_25_hz"] and
+            row.get("logic_us_per_tu", float("inf")) < 10000.0)
     return {"samples": perf_rows, "cdram_min_bytes": min(cdram_values) if cdram_values else None,
             "event_count": len(events), "nearby_ms": nearby_ms}
 
@@ -88,11 +129,26 @@ def report(parsed: dict) -> dict:
     return {"sample_count": len(samples), "cdram_min_bytes": parsed["cdram_min_bytes"],
             "event_count": parsed["event_count"], "event_nearby_ms": parsed["nearby_ms"],
             "by_enemy_count": groups,
+            "clean_windows_by_enemy_count": {
+                (f"{low}-{high}" if high < 99999 else f"{low}+"):
+                    summarize([r for r in samples if r["clean_window"] and
+                               low <= r["enemies"] <= high])
+                for low, high in BINS
+                if any(r["clean_window"] and low <= r["enemies"] <= high
+                       for r in samples)
+            },
+            "simulation_under_25_hz": summarize(
+                [r for r in samples if r["logic_under_25_hz"]]),
+            "slow_with_low_measured_logic_cost": summarize(
+                [r for r in samples if r["slow_with_low_measured_logic_cost"]]),
             "windows_with_load_or_transition": summarize([r for r in samples if not r["clean_window"]]),
             "windows_with_texture_load": summarize([r for r in samples if r["texture_load_nearby"]]),
             "windows_without_texture_load": summarize([r for r in samples if not r["texture_load_nearby"]]),
             "windows_without_load_or_transition": summarize([r for r in samples if r["clean_window"]]),
-            "slowest_logic_windows": slow}
+            "slowest_logic_windows": slow,
+            "slowest_clean_logic_windows": sorted(
+                (r for r in samples if r["clean_window"]),
+                key=lambda r: (r.get("logic_hz", 999), r["time_ms"]))[:8]}
 
 
 def main() -> None:

@@ -33,14 +33,14 @@ def scan_tar(blob: bytes, found: dict[str, list[str]], origin: str) -> None:
 
 def iter_ar_members(blob: bytes):
     """Read Debian package ar members; no subprocess or filesystem writes."""
-    if not blob.startswith(b"!<arch>\\n"):
+    if not blob.startswith(b"!<arch>\n"):
         raise ValueError("Not a Debian ar archive")
     offset = 8
     while offset < len(blob):
         if offset + 60 > len(blob):
             raise ValueError("Truncated ar header")
         header = blob[offset:offset + 60]
-        if header[58:60] != b"\\x60\\n":
+        if header[58:60] != b"\\x60\n":
             raise ValueError("Invalid ar header")
         try:
             size = int(header[48:58].strip())
@@ -105,10 +105,10 @@ def main() -> None:
     try:
         report = inspect_sdk_zip(args.zip)
     except (OSError, zipfile.BadZipFile) as exc:
-        parser.exit(2, f"Cannot inspect SDK ZIP: {exc}\\n")
+        parser.exit(2, f"Cannot inspect SDK ZIP: {exc}\n")
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if not report["crosscompiler_present"]:
-        parser.exit(1, "No usable compiler candidate was located in the inspected contents.\\n")
+        parser.exit(1, "No usable compiler candidate was located in the inspected contents.\n")
 
 
 if __name__ == "__main__":

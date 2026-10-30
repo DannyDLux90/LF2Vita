@@ -77,7 +77,14 @@ wenn die Rechteckvereinigungen sicher disjunkt sind.
   (8, 40, 72 Figuren), inklusive passiver kind-6-Super-Punch-Ereignisse,
   unvollständiger Waffenbereiche, Statusmutationen, gleicher Reihenfolge,
   identischen Ereignishashes und Actor-Zuständen.
-- GitHub Actions: normale GCC-Kompilierung und UBSan-Ausführung.
+- `tests/native/test_stage_world_regions.c` – 200.000 zusätzliche
+  Fälle mit der historischen `region_world`-Spiegelungsformel,
+  negativen Positionen, kind-6-Reaktionszonen und unsicherer
+  Waffen-Geometrie. Ergebnis im Host-Test: **0 False Negatives**,
+  89.581 aussortierte Fälle. Das Testmodell ersetzt **nicht**
+  die Round-27-`region_world`- und `apply_hits`-Laufzeitfunktionen.
+- GitHub Actions: normale GCC-Kompilierung und UBSan-Ausführung
+  auch für den 200.000-Fälle-Geometrietest.
 - Der ursprüngliche Round-27-Filter für passive ITRs ist weiterhin die
   separate produktive Änderung und wird durch diesen Prototyp nicht ersetzt.
 

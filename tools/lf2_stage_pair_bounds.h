@@ -59,4 +59,39 @@ static inline int lf2_pair_may_contact(
     return !(offense->x1<=body->x0 || body->x1<=offense->x0 ||
              offense->y1<=body->y0 || body->y1<=offense->y0);
 }
+
+/* Some stock LF2 attacks have a SECOND valid outcome: a punch in frame
+ * 60/65 can contact a victim's passive kind-6 ITR, change the attacker to
+ * frame 70 and return, EVEN WHEN THE VICTIM BDY IS NOT HIT.
+ *
+ * When the attacker is eligible for that transition, pass the bounds
+ * containing ALL victim kind-6 ITRs as passive_reaction (or mark it
+ * incomplete if it cannot be computed). This check intentionally allows
+ * false positives, never false negatives.
+ *
+ * The caller MUST fail open for held weapons: apply_held_weapon_hit() runs
+ * before fighter ITR processing and uses independent weapon regions.
+ * Use lf2_pair_bounds_uncertain(&attacker) if any held-weapon region may
+ * attack, unless the FULL transformed weapon geometry has been included.
+ */
+static inline void lf2_pair_bounds_uncertain(lf2_pair_bounds_t *b) {
+    if (b) b->complete=0;
+}
+
+static inline int lf2_pair_may_contact_with_passive(
+    const lf2_pair_bounds_t *offense,
+    const lf2_pair_bounds_t *body,
+    const lf2_pair_bounds_t *passive_reaction)
+{
+    if (lf2_pair_may_contact(offense,body))
+        return 1;
+    if (!passive_reaction)
+        return 0;
+    if (!passive_reaction->complete)
+        return 1;
+    if (!passive_reaction->has_region)
+        return 0; /* definitely no passive zones */
+    return lf2_pair_may_contact(offense,passive_reaction);
+}
+
 #endif

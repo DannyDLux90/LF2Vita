@@ -1,0 +1,67 @@
+name: Round 33 real Vita crossbuild of Stage adapter installer
+
+on:
+  push:
+    branches:
+      - tooling/round28-stage-perf-audit
+    paths:
+      - tools/apply_round31_broadphase.py
+      - tools/lf2_stage_pair_runtime.inc
+      - tools/lf2_stage_pair_bounds.h
+      - .github/workflows/stage-adapter-vita-crossbuild.yml
+  pull_request:
+    paths:
+      - tools/apply_round31_broadphase.py
+      - tools/lf2_stage_pair_runtime.inc
+      - tools/lf2_stage_pair_bounds.h
+      - .github/workflows/stage-adapter-vita-crossbuild.yml
+
+permissions:
+  contents: read
+
+jobs:
+  historic-engine-elf:
+    runs-on: ubuntu-latest
+    container:
+      image: vitasdk/vitasdk:2026.08
+    env:
+      VITASDK: /usr/local/vitasdk
+    steps:
+      - name: Checkout current installer from tooling branch
+        uses: actions/checkout@v4
+      - name: Checkout isolated historical game source (NEVER overwrite Round 27)
+        shell: bash
+        run: git clone --depth 1 --single-branch --branch pc-compat-round6-pc-fidelity https://github.com/DannyDLux90/LF2Vita.git /tmp/lf2-historic
+      - name: Check patcher dry run, then explicitly enable candidate
+        shell: bash
+        run: |
+          python3 tools/apply_round31_broadphase.py /tmp/lf2-historic
+          python3 tools/apply_round31_broadphase.py /tmp/lf2-historic --apply --enable
+          git -C /tmp/lf2-historic diff --check
+      - name: Configure historical ELF-only compilation without licensed assets
+        shell: bash
+        run: |
+          export PATH="$VITASDK/bin:$PATH"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("/tmp/lf2-historic/CMakeLists.txt")
+          c=p.read_text()
+          start="vita_create_vpk(lf2vita.vpk"
+          assert c.count(start)==1
+          c=c.replace(start, "if(FALSE)\n"+start, 1)+"\nendif()\n"
+          p.write_text(c)
+          PY
+          cmake -S /tmp/lf2-historic -B /tmp/lf2-historic-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
+      - name: Crosscompile real Stage adapter with VitaSDK 15.2.0
+        shell: bash
+        run: |
+          export PATH="$VITASDK/bin:$PATH"
+          cmake --build /tmp/lf2-historic-build --target lf2vita --parallel 2
+          test -s /tmp/lf2-historic-build/lf2vita
+      - name: Verify exact source round-trip on historical branch
+        shell: bash
+        run: |
+          git -C /tmp/lf2-historic checkout -- CMakeLists.txt
+          python3 tools/apply_round31_broadphase.py /tmp/lf2-historic --undo --apply
+          git -C /tmp/lf2-historic diff --exit-code
+          test -z "$(git -C /tmp/lf2-historic ls-files --others --exclude-standard)"

@@ -22,7 +22,23 @@ INC = "fix3/lf2_stage_pair_runtime.inc"
 MARKER = '#include "fix3/lf2_stage_pair_runtime.inc"'
 REFERENCE = "apply_hits(world,fighters,total,a,b,difficulty);"
 GUARDED = "if(LF2_STAGE_PAIR_RUNTIME_ALLOWED(&fighters[a],&fighters[b]))" + REFERENCE
-TOP_LEVEL_ANCHOR = '#undef apply_hits\n'
+# Actual function-boundary verified by a VitaSDK crossbuild on the historical
+# code; #undef apply_hits follows an OPEN rendering function and is NOT valid.
+TOP_LEVEL_ANCHOR = '#undef in_action\n'
+TAIL_ANCHOR = '#include "fix3/game_24.inc"\n'
+EARLY_DECL = """/* LF2 Stage collision prefilter prototype: defined after game_24 closes. */
+#ifndef LF2_STAGE_BROADPHASE_ENABLED
+#define LF2_STAGE_BROADPHASE_ENABLED 0
+#endif
+#if LF2_STAGE_BROADPHASE_ENABLED
+static inline int lf2_stage_pair_runtime_may_contact(fighter_t *, fighter_t *);
+#define LF2_STAGE_PAIR_RUNTIME_ALLOWED(a,b) lf2_stage_pair_runtime_may_contact((a),(b))
+#else
+#define LF2_STAGE_PAIR_RUNTIME_ALLOWED(a,b) 1
+#endif
+"""
+TAIL_INSERT = '#undef LF2_STAGE_PAIR_RUNTIME_ALLOWED\n' + MARKER + '\n'
+ENABLE_LINE = '#define LF2_STAGE_BROADPHASE_ENABLED 1\n'
 
 
 def prepare(root: Path, enable: bool = False) -> dict[str, bytes]:
@@ -35,8 +51,9 @@ def prepare(root: Path, enable: bool = False) -> dict[str, bytes]:
     # is fully compatible with any future LF2 Vita game split.
     c = gamec.read_text(encoding="utf-8")
     g = stage.read_text(encoding="utf-8")
-    if TOP_LEVEL_ANCHOR not in c or 'game_15.inc' not in c:
-        raise ValueError("Top-level after-game_15 boundary missing; abort")
+    if (c.count(TOP_LEVEL_ANCHOR) != 1 or c.count(TAIL_ANCHOR) != 1
+            or 'game_02_prefix.inc' not in c or 'game_15.inc' not in c):
+        raise ValueError("Known top-level or trailing Stage boundary missing; abort")
     if "LF2_STAGE_PAIR_RUNTIME_ALLOWED" not in g:
         if g.count(REFERENCE) != 1:
             raise ValueError("Expected exactly one Stage apply_hits call; abort")
@@ -49,14 +66,20 @@ def prepare(root: Path, enable: bool = False) -> dict[str, bytes]:
     elif g.count(GUARDED) != 1:
         raise ValueError("Existing Stage guard differs from expected version; abort")
 
-    lines = '#define LF2_STAGE_BROADPHASE_ENABLED 1\n' if enable else ""
     if MARKER not in c:
-        c = c.replace(TOP_LEVEL_ANCHOR, TOP_LEVEL_ANCHOR + lines + MARKER + "\n", 1)
-    elif enable and "#define LF2_STAGE_BROADPHASE_ENABLED 1" not in c:
-        c = c.replace(MARKER, lines + MARKER, 1)
-    elif not enable and "#define LF2_STAGE_BROADPHASE_ENABLED 1" in c:
-        # Never silently disable an existing explicitly enabled experiment.
-        raise ValueError("Already enabled: must explicitly pass --enable or revert manually")
+        # The prefix ends at the declared top-level boundary. The tail is
+        # known top-level only after the *complete* game_24.inc fragment.
+        c = c.replace(TOP_LEVEL_ANCHOR,
+                      TOP_LEVEL_ANCHOR + (ENABLE_LINE if enable else "") + EARLY_DECL,
+                      1)
+        c = c.replace(TAIL_ANCHOR, TAIL_ANCHOR + TAIL_INSERT, 1)
+    elif (EARLY_DECL not in c or TAIL_ANCHOR + TAIL_INSERT not in c
+          or c.count(MARKER) != 1):
+        raise ValueError("Unknown or incomplete Stage adapter installation; abort")
+    elif enable and ENABLE_LINE not in c:
+        c = c.replace(EARLY_DECL, ENABLE_LINE + EARLY_DECL, 1)
+    elif not enable and ENABLE_LINE in c:
+        raise ValueError("Already enabled: must explicitly pass --enable or undo")
 
     pending = {
         gamec: c.encode("utf-8"),
@@ -98,16 +121,19 @@ def prepare_undo(root: Path) -> dict[str, bytes | None]:
     if c.count(MARKER) != 1 or g.count(GUARDED) != 1:
         raise ValueError("Partial or multiply-installed adapter; undo refused")
 
-    enabled = TOP_LEVEL_ANCHOR + (
-        "#define LF2_STAGE_BROADPHASE_ENABLED 1\n" + MARKER + "\n"
-    )
-    disabled = TOP_LEVEL_ANCHOR + MARKER + "\n"
+    # Refuse to undo anything that does not match our exact two-site
+    # installation. No guesses from older branches or shifted includes.
+    if c.count(TAIL_ANCHOR + TAIL_INSERT) != 1:
+        raise ValueError("Adapter tail moved or modified; undo refused")
+    enabled = TOP_LEVEL_ANCHOR + ENABLE_LINE + EARLY_DECL
+    disabled = TOP_LEVEL_ANCHOR + EARLY_DECL
     if c.count(enabled) == 1:
         c = c.replace(enabled, TOP_LEVEL_ANCHOR, 1)
     elif c.count(disabled) == 1:
         c = c.replace(disabled, TOP_LEVEL_ANCHOR, 1)
     else:
-        raise ValueError("Adapter include or option moved; undo refused")
+        raise ValueError("Adapter prototype moved or modified; undo refused")
+    c = c.replace(TAIL_ANCHOR + TAIL_INSERT, TAIL_ANCHOR, 1)
     # Require exact known site so a foreign conditional cannot be removed.
     if g.count("if(a!=b&&fighters[b].active)" + GUARDED) != 1:
         raise ValueError("Stage collision guard changed; undo refused")

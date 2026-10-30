@@ -8,6 +8,12 @@
 #include "fix3/game_02_prefix.inc"
 #undef in_action
 
+/* The split fragments open functions across include boundaries: declare the
+   Stage candidate at the first documented TOP-LEVEL boundary, then define
+   it only AFTER the complete game_24.inc fragment. */
+static inline int lf2_stage_pair_runtime_may_contact(fighter_t *, fighter_t *);
+#define LF2_STAGE_PAIR_RUNTIME_ALLOWED(a,b) lf2_stage_pair_runtime_may_contact((a),(b))
+
 /* Public stock-data exports, diagnostics and the stock packet input adapter
    depend only on the core fighter/object types established above, so keep
    them at this known top-level boundary rather than inside later split
@@ -68,9 +74,6 @@
 #include "fix3/game_14.inc"
 #include "fix3/game_15.inc"
 #undef apply_hits
-/* Historical Round-6-based compiler smoke test ONLY, not Round-27 production. */
-#define LF2_STAGE_BROADPHASE_ENABLED 1
-#include "fix3/lf2_stage_pair_runtime.inc"
 
 #define make_ai_retreat_input stock_base_make_ai_retreat_input
 #include "fix3/game_16.inc"
@@ -96,3 +99,8 @@
 #include "fix3/game_22.inc"
 #include "fix3/game_23.inc"
 #include "fix3/game_24.inc"
+
+/* Experimental only: actual definition after the closing Stage function. */
+#undef LF2_STAGE_PAIR_RUNTIME_ALLOWED
+#define LF2_STAGE_BROADPHASE_ENABLED 1
+#include "fix3/lf2_stage_pair_runtime.inc"

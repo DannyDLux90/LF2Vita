@@ -37,6 +37,29 @@ static inline int lf2_stage_runtime_contact_itr_kind(const lf2_itr_def_t *it) {
 }
 
 #if LF2_STAGE_BROADPHASE_ENABLED
+/* The production region_world() computes integer x/y using several signed
+ * additions/subtractions. Reject impossible/overflowing authored coordinates
+ * BEFORE calling that function, to avoid undefined signed integer overflow.
+ * The exact expression mirrors the world-space rule in game_06.inc. */
+static inline int lf2_stage_region_is_int_safe(
+    const fighter_t *f, const lf2_frame_def_t *frame,
+    int rx,int ry,int rw,int rh)
+{
+    if (!f || !frame || rw<=0 || rh<=0 ||
+        !isfinite(f->x) || !isfinite(f->y) ||
+        fabsf(f->x)>1000000.f || fabsf(f->y)>1000000.f)
+        return 0;
+    const int64_t px=(int)f->x,py=(int)f->y;
+    const int64_t wx=!f->facing ?
+        px-(int64_t)frame->centerx+rx :
+        px+1+(int64_t)frame->centerx-rw-rx;
+    const int64_t wy=py-(int64_t)frame->centery+ry;
+    return wx>=INT_MIN && wx<=INT_MAX &&
+           wy>=INT_MIN && wy<=INT_MAX &&
+           wx+(int64_t)rw<=INT_MAX &&
+           wy+(int64_t)rh<=INT_MAX;
+}
+
 static inline int lf2_stage_pair_runtime_may_contact(
     fighter_t *a, fighter_t *b)
 {
@@ -63,7 +86,7 @@ static inline int lf2_stage_pair_runtime_may_contact(
     for (int i=0;i<af->itr_count;i++) {
         lf2_itr_def_t *it=&af->itrs[i];
         if (!lf2_stage_runtime_contact_itr_kind(it)) continue;
-        if (it->w<=0 || it->h<=0) return 1;
+        if (!lf2_stage_region_is_int_safe(a,af,it->x,it->y,it->w,it->h)) return 1;
         int x,y;
         region_world(a,it->x,it->y,it->w,it->h,&x,&y);
         lf2_pair_bounds_add(&atk,x,y,it->w,it->h);
@@ -71,7 +94,7 @@ static inline int lf2_stage_pair_runtime_may_contact(
     }
     for (int i=0;i<bf->bdy_count;i++) {
         lf2_bdy_def_t *bd=&bf->bdys[i];
-        if (bd->w<=0 || bd->h<=0) return 1;
+        if (!lf2_stage_region_is_int_safe(b,bf,bd->x,bd->y,bd->w,bd->h)) return 1;
         int x,y;
         region_world(b,bd->x,bd->y,bd->w,bd->h,&x,&y);
         lf2_pair_bounds_add(&body,x,y,bd->w,bd->h);
@@ -80,7 +103,7 @@ static inline int lf2_stage_pair_runtime_may_contact(
         for (int i=0;i<bf->itr_count;i++) {
             lf2_itr_def_t *it=&bf->itrs[i];
             if (it->kind!=6) continue;
-            if (it->w<=0 || it->h<=0) return 1;
+            if (!lf2_stage_region_is_int_safe(b,bf,it->x,it->y,it->w,it->h)) return 1;
             int x,y;
             region_world(b,it->x,it->y,it->w,it->h,&x,&y);
             lf2_pair_bounds_add(&kind6,x,y,it->w,it->h);

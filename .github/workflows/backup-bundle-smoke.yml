@@ -1,0 +1,58 @@
+name: LF2 Vita single-ZIP backup builder smoke test
+
+on:
+  push:
+    branches:
+      - backup/2026-10-30-complete-bundle-kit
+    paths:
+      - backup/create_lf2_complete_backup.ps1
+      - .github/workflows/backup-bundle-smoke.yml
+  workflow_dispatch:
+
+jobs:
+  test-small-synthetic-backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tiny non-proprietary fixtures (NO game assets)
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          from pathlib import Path
+          out=Path('/tmp/lf2-backup-fixtures')
+          out.mkdir(exist_ok=True)
+          samples={
+            'LF2Vita_Round27_Vollstaendiger_Quellcode_2026-10-30.zip': 'source',
+            'LF2Vita-next-chat-source-workspace-2026-09-13.zip': 'workspace',
+            'LF2Vita_Round24_Stage_Performance_Test_2026-10-30.vpk': 'last_vpk',
+            'Vita SDK(4).zip': 'sdk',
+            'LF2Vita_Round27_Performance_Profiling.patch': 'patch',
+            'mock_github.zip': 'tooling'
+          }
+          for name, data in samples.items():
+              f=out/name
+              if name.endswith(('.zip','.vpk')):
+                  with zipfile.ZipFile(f,'w') as z:z.writestr('MOCK.txt',data)
+              else:f.write_text(data)
+          PY
+      - name: Execute PowerShell single-ZIP backup creation and SHA checks
+        shell: pwsh
+        run: |
+          ./backup/create_lf2_complete_backup.ps1 -InputDirectory /tmp/lf2-backup-fixtures -GitHubSnapshotPath /tmp/lf2-backup-fixtures/mock_github.zip
+      - name: Independently verify resulting archive, manifest and hashes
+        run: |
+          python3 - <<'PY'
+          import json,hashlib,zipfile
+          path='/tmp/lf2-backup-fixtures/LF2Vita_Gesamtbackup_2026-10-30.zip'
+          with zipfile.ZipFile(path) as z:
+              assert z.testzip() is None
+              assert len(z.namelist())==9, z.namelist()
+              manifest=json.loads(z.read('00_MANIFEST.json'))
+              assert len(manifest['items'])==6
+              for item in manifest['items']:
+                  assert len(z.read(item['path']))==item['size_bytes']
+                  assert hashlib.sha256(z.read(item['path'])).hexdigest()==item['sha256']
+          print('Backup ZIP PASS: 6 items, metadata, SHA256 parity')
+          PY

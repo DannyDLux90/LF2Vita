@@ -83,12 +83,14 @@ def report(parsed: dict) -> dict:
     for low, high in BINS:
         subset = [r for r in samples if low <= r["enemies"] <= high]
         if subset:
-            groups[f"{low}-{high if high < 99999 else '+'}"] = summarize(subset)
+            groups[f"{low}-{high}" if high < 99999 else f"{low}+"] = summarize(subset)
     slow = sorted(samples, key=lambda r: (r.get("logic_hz", 999), r["time_ms"]))[:8]
     return {"sample_count": len(samples), "cdram_min_bytes": parsed["cdram_min_bytes"],
             "event_count": parsed["event_count"], "event_nearby_ms": parsed["nearby_ms"],
             "by_enemy_count": groups,
             "windows_with_load_or_transition": summarize([r for r in samples if not r["clean_window"]]),
+            "windows_with_texture_load": summarize([r for r in samples if r["texture_load_nearby"]]),
+            "windows_without_texture_load": summarize([r for r in samples if not r["texture_load_nearby"]]),
             "windows_without_load_or_transition": summarize([r for r in samples if r["clean_window"]]),
             "slowest_logic_windows": slow}
 

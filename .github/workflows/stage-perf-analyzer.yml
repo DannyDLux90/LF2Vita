@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - tools/analyze_stage_perf_log.py
+      - tools/inspect_vitasdk_bundle.py
+      - tests/test_inspect_vitasdk_bundle.py
       - tests/test_analyze_stage_perf_log.py
       - .github/workflows/stage-perf-analyzer.yml
   push:
@@ -17,5 +19,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Run standard-library-only analyzer regression tests
+      - name: Run standard-library-only profiler regression tests
         run: python3 -m unittest discover -s tests -p 'test_analyze_stage_perf_log.py' -v
+      - name: Run offline VitaSDK bundle inspector regression tests
+        run: python3 -m unittest discover -s tests -p 'test_inspect_vitasdk_bundle.py' -v

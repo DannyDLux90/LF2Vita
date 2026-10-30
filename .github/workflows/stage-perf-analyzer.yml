@@ -1,0 +1,72 @@
+name: Stage performance log analyzer (host tests)
+
+on:
+  pull_request:
+    paths:
+      - tools/analyze_stage_perf_log.py
+      - tools/inspect_vitasdk_bundle.py
+      - tests/test_inspect_vitasdk_bundle.py
+      - tools/lf2_stage_pair_bounds.h
+      - tests/native/test_stage_pair_bounds.c
+      - tests/native/test_stage_world_regions.c
+      - tests/native/test_stage_pair_runtime_adapter.c
+      - tools/lf2_stage_pair_runtime.inc
+      - tools/apply_round31_broadphase.py
+      - tests/test_apply_round31_broadphase.py
+      - tests/test_analyze_stage_perf_log.py
+      - .github/workflows/stage-perf-analyzer.yml
+  push:
+    branches:
+      - tooling/round28-stage-perf-audit
+
+jobs:
+  host-analyzer:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run standard-library-only profiler regression tests
+        run: python3 -m unittest discover -s tests -p 'test_analyze_stage_perf_log.py' -v
+      - name: Run offline VitaSDK bundle inspector regression tests
+        run: python3 -m unittest discover -s tests -p 'test_inspect_vitasdk_bundle.py' -v
+      - name: Build and compare conservative Stage broad-phase against reference
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Itools tests/native/test_stage_pair_bounds.c -o /tmp/lf2_pair_bounds_test
+          /tmp/lf2_pair_bounds_test
+      - name: Bounds prototype with undefined-behavior sanitizer
+        run: |
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Itools tests/native/test_stage_pair_bounds.c -o /tmp/lf2_pair_bounds_ubsan
+          /tmp/lf2_pair_bounds_ubsan
+      - name: Verify 200k mirrored LF2 region candidates with UBSan
+        run: |
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Itools tests/native/test_stage_world_regions.c -o /tmp/lf2_world_regions_ubsan
+          /tmp/lf2_world_regions_ubsan
+      - name: Test opt-in Stage adapter with 200k mutable runtime mock cases
+        run: |
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Itools tests/native/test_stage_pair_runtime_adapter.c -o /tmp/lf2_stage_adapter_test
+          /tmp/lf2_stage_adapter_test
+      - name: Test Round-27 source integration patcher against historic tree
+        run: python3 -m unittest discover -s tests -p 'test_apply_round31_broadphase.py' -v
+      - name: Real historical source-branch dry-run, install, enable and exact undo
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin refs/heads/pc-compat-round6-pc-fidelity:refs/remotes/origin/pc-compat-round6-pc-fidelity
+          mkdir -p "$RUNNER_TEMP/lf2-historical-source"
+          git archive refs/remotes/origin/pc-compat-round6-pc-fidelity | tar -x -C "$RUNNER_TEMP/lf2-historical-source"
+          ROOT="$RUNNER_TEMP/lf2-historical-source"
+          sha256sum "$ROOT/src/game.c" "$ROOT/src/fix3/game_24.inc" | sed "s#$ROOT/##g" > "$RUNNER_TEMP/before.sha"
+          python3 tools/apply_round31_broadphase.py "$ROOT"
+          python3 tools/apply_round31_broadphase.py "$ROOT" --apply
+          python3 tools/apply_round31_broadphase.py "$ROOT" --apply --enable
+          grep -Fq 'LF2_STAGE_BROADPHASE_ENABLED 1' "$ROOT/src/game.c"
+          python3 tools/apply_round31_broadphase.py "$ROOT" --undo --apply
+          test ! -f "$ROOT/src/fix3/lf2_stage_pair_runtime.inc"
+          test ! -f "$ROOT/src/fix3/lf2_stage_pair_bounds.h"
+          sha256sum "$ROOT/src/game.c" "$ROOT/src/fix3/game_24.inc" | sed "s#$ROOT/##g" > "$RUNNER_TEMP/after.sha"
+          diff -u "$RUNNER_TEMP/before.sha" "$RUNNER_TEMP/after.sha"
+          echo 'PASS historical real-source install -> enable -> exact byte-for-byte undo (not Round-27 build)'
+
+
+

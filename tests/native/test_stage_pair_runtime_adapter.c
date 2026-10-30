@@ -155,6 +155,32 @@ int main(void) {
         fprintf(stderr,"Expected fail-open for target coordinate overflow\n");
         return 3;
     }
+    /* Intermediate overflow that later cancels to a valid final int:
+       (int)0 - INT_MIN overflows before rx=-2 is applied. */
+    generate(a,b);
+    a->held_oid=0;a->x=0.f;a->y=0.f;a->facing=0;
+    lf2_frame_def_t *attack_frame=&a->def.frames[a->frame];
+    attack_frame->centerx=INT_MIN;attack_frame->centery=0;
+    attack_frame->itr_count=1;
+    attack_frame->itrs[0]=(lf2_itr_def_t){
+        .kind=0,.x=-2,.y=0,.w=1,.h=1};
+    if (lf2_stage_region_is_int_safe(a,attack_frame,-2,0,1,1) ||
+        lf2_stage_pair_runtime_may_contact(a,b)!=1) {
+        fprintf(stderr,"Expected fail-open for attacker intermediate overflow\\n");
+        return 3;
+    }
+    generate(a,b);
+    a->held_oid=0;b->x=0.f;b->y=0.f;b->facing=0;
+    lf2_frame_def_t *body_frame=&b->def.frames[b->frame];
+    body_frame->centerx=0;body_frame->centery=INT_MIN;
+    body_frame->bdy_count=1;
+    body_frame->bdys[0]=(lf2_bdy_def_t){
+        .x=0,.y=-2,.w=1,.h=1};
+    if (lf2_stage_region_is_int_safe(b,body_frame,0,-2,1,1) ||
+        lf2_stage_pair_runtime_may_contact(a,b)!=1) {
+        fprintf(stderr,"Expected fail-open for target y intermediate overflow\\n");
+        return 3;
+    }
     unsigned rejected=0,possible=0,weapon=0;
     for(int n=0;n<100000;n++){
         generate(a,b);

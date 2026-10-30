@@ -22,6 +22,10 @@ python3 tools/apply_round31_broadphase.py /pfad/zum/vollstaendigen/lf2_round27 -
 
 # NUR für separaten gezielten Quell-/SDK-/Hardware-Vergleich:
 python3 tools/apply_round31_broadphase.py /pfad/zum/vollstaendigen/lf2_round27 --apply --enable
+
+# Falls ein Test Abweichungen zeigt: zuerst trocken prüfen, dann vollständig zurücknehmen:
+python3 tools/apply_round31_broadphase.py /pfad/zum/vollstaendigen/lf2_round27 --undo
+python3 tools/apply_round31_broadphase.py /pfad/zum/vollstaendigen/lf2_round27 --undo --apply
 ```
 
 **Wichtig:** Die lokale Round-27-Quelle enthält bereits den Round-26-Stage-D-Pad-Umbau, den Trink-Fix, Round-27-Angriffsfilter, Rendering-Anpassungen und Stage-Hardware-Diagnosen. Der Host-Test im GitHub-CI verwendet als Dateivorlage eine **synthetisch um den neueren Include-Abschluss ergänzte ältere Haupt-Branch**, **nicht** die echte Round-27-Datei. Deshalb folgt aus dem erfolgreichen Host-Test **keine** erfolgreiche reale Source-Integration.
@@ -37,13 +41,15 @@ python3 tools/apply_round31_broadphase.py /pfad/zum/vollstaendigen/lf2_round27 -
 ## Sicherheitsprinzipien
 
 - Unbekannte/ungültige Positionen, fehlende Frames, leere/ungewöhnliche Rechteckdaten oder `held_oid != 0` werden **nicht herausgefiltert**. Der alte `apply_hits`-Pfad bleibt erreichbar.
+- Zusätzlich werden alle **Zwischenergebnisse** der originalen Ganzzahlkoordinaten-Berechnung überprüft, nicht nur die endgültigen Weltkoordinaten. Sonst könnte ein int-Überlauf vor dem anschließenden Ausgleich schon undefiniertes C-Verhalten erzeugen.
+- Der Rücknahmebefehl akzeptiert nur den exakt erwarteten eingebauten Code und **bytegenau unveränderte** generierte Include-Dateien. Fremde lokale Modifikationen werden niemals überschrieben bzw. gelöscht. Nach erfolgreicher Rücknahme stimmen `src/game.c` und `game_24.inc` bytegenau mit dem Original vor dem Einbau überein.
 - Ein normaler Schlag kann eine passive `ITR kind 6` am Ziel treffen und dadurch in Super-Punch Frame 70 umschalten, auch bei räumlich disjunkten Ziel-BDYs. Der Adapter berücksichtigt das ausdrücklich.
 - Keine neue Gegnerbegrenzung, kein schnelleres/abweichendes Kampf-`wait`, keine veränderte Simulationsfrequenz.
 - Die Round-27-Kompatibilität muss im echten Quellstand erst bestätigt werden; bei unbekannter Stage-Paarloop stoppt der Einbauhelfer absichtlich.
 
 ## Bisherige Host-Nachweise
 
-GitHub Actions `41117487479` auf Commit `5e45359b`: **SUCCESS**.
-8 Performance-Ananlyzer-Tests + 4 SDK-Scanner-Tests + 4 Integrations-Sicherheitstests sowie native GCC/UBSan-Kollisionsszenen und 200.000 Adapter-Vergleiche. Die letzte Kategorie nutzt Mock-Structs, nicht die echte Engine.
+GitHub Actions **41120193869** auf Commit `b2b6bd79`: **SUCCESS**.
+8 Performance-Analyzer-Tests + 4 SDK-Scanner-Tests + **7 Installations-/Rücknahme-Sicherheitstests** sowie native GCC/UBSan-Kollisionsszenen und 200.000 Adapter-Vergleiche. Ein zusätzlicher CI-Test holt den **echten historischen** Zweig `pc-compat-round6-pc-fidelity`, installiert/aktiviert den Filter und nimmt ihn wieder zurück; anschließend verifiziert er die Bytegleichheit der ursprünglichen Haupt- und Stage-Dateien. Diese historische Quellenprobe ist **kein** Round-27-Build. Der Native-C-Adaptertest nutzt Mock-Strukturen, nicht die vollständige Vita-Engine.
 
 **Keinen öffentlich verfügbaren PR auf GitHub mit dem aktuellsten Spielquellstand verwechseln:** PR #3 ist eine Tooling-/Prototyp-Branch.

@@ -34,7 +34,7 @@
             for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active)update_object(world,&world->objects[i],fighters,total);
             object_apply_reflections(world);
             int oldhp[LF2_MAX_ACTORS];for(int i=0;i<total;i++)oldhp[i]=fighters[i].hp;
-            for(int a=0;a<total;a++)if(fighters[a].active)for(int b=0;b<total;b++)if(a!=b&&fighters[b].active)apply_hits(world,fighters,total,a,b,difficulty);
+            for(int a=0;a<total;a++)if(fighters[a].active)for(int b=0;b<total;b++)if(a!=b&&fighters[b].active&&LF2_STAGE_PAIR_RUNTIME_ALLOWED(&fighters[a],&fighters[b]))apply_hits(world,fighters,total,a,b,difficulty);
             for(int a=0;a<total;a++)if(fighters[a].active)fighter_apply_hits_to_items(world,fighters,total,a);
             for(int i=0;i<LF2_MAX_ACTIVE_OBJECTS;i++)if(world->objects[i].active){object_apply_hits(world,&world->objects[i],fighters,total,difficulty);object_apply_hits_to_items(world,&world->objects[i]);}
             update_hit_fx(world);

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -41,10 +40,8 @@ def prepare(root: Path, enable: bool = False) -> dict[str, bytes]:
             raise ValueError("Expected exactly one Stage apply_hits call; abort")
         # Reject unexpected per-pair guards or newly rearranged Stage logic,
         # rather than compounding a foreign conditional with our own.
-        expected = re.compile(
-            r"if\\s*\\(\\s*a\\s*!=\\s*b\\s*&&\\s*fighters\\[b\\]\\.active\\s*\\)\\s*"
-            + re.escape(REFERENCE))
-        if len(expected.findall(g)) != 1:
+        immediate = "if(a!=b&&fighters[b].active)" + REFERENCE
+        if g.count(immediate) != 1:
             raise ValueError("Stage innermost pair loop differs; review required")
         g = g.replace(REFERENCE, GUARDED)
     elif g.count(GUARDED) != 1:

@@ -88,6 +88,8 @@ else()
   message(WARNING "assets/main_bgm.wav is missing; run tools/prepare_music.py with your LF2 2.00a archive to include the original title music")
 endif()
 
+option(LF2_ELF_ONLY "Configure without proprietary assets or VPK packaging" OFF)
+if(NOT LF2_ELF_ONLY)
 vita_create_vpk(lf2vita.vpk ${VITA_TITLEID} eboot.bin
   VERSION ${VITA_VERSION}
   NAME ${VITA_APP_NAME}
@@ -125,3 +127,4 @@ vita_create_vpk(lf2vita.vpk ${VITA_TITLEID} eboot.bin
   FILE "${CMAKE_SOURCE_DIR}/assets/stages/08_ft.png" "assets/stages/08_ft.png"
   FILE "${CMAKE_SOURCE_DIR}/gamepack/game.lf2pak" "game.lf2pak"
 )
+endif()

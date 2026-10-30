@@ -25,15 +25,15 @@ def make_deb(paths: list[str]) -> bytes:
             item.size = len(payload)
             item.mode = 0o755
             t.addfile(item, io.BytesIO(payload))
-    data = b"!<arch>\\n"
+    data = b"!<arch>\n"
     for name, payload in (
-        ("debian-binary", b"2.0\\n"),
+        ("debian-binary", b"2.0\n"),
         ("data.tar.gz", tarout.getvalue()),
     ):
         header = (f"{name + '/':<16}{0:<12}{0:<6}{0:<6}{100644:<8}{len(payload):<10}"
-                  + "\x60\\n").encode("ascii")
+                  + "\x60\n").encode("ascii")
         assert len(header) == 60
-        data += header + payload + (b"\\n" if len(payload) & 1 else b"")
+        data += header + payload + (b"\n" if len(payload) & 1 else b"")
     return data
 
 
@@ -77,7 +77,7 @@ class VitaSdkBundleTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             list(inspector.iter_ar_members(b"something else"))
         with self.assertRaises(ValueError):
-            list(inspector.iter_ar_members(b"!<arch>\\n123"))
+            list(inspector.iter_ar_members(b"!<arch>\n123"))
 
 
 if __name__ == "__main__":

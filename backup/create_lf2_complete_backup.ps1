@@ -17,6 +17,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $sourceDir = (Resolve-Path -LiteralPath $InputDirectory).Path
 $destination = if ([System.IO.Path]::IsPathRooted($OutputZip)) {
@@ -111,7 +112,7 @@ MANIFEST.json und SHA256SUMS.txt dienen der Inhaltsprüfung.
     $encoder = New-Object System.Text.UTF8Encoding($false)
     $outstream = [System.IO.File]::Open($destination,[System.IO.FileMode]::CreateNew)
     try {
-        $archive = New-Object System.IO.Compression.ZipArchive($outstream,[System.IO.Compression.ZipArchiveMode]::Create,$true)
+        $archive = [System.IO.Compression.ZipArchive]::new($outstream,[System.IO.Compression.ZipArchiveMode]::Create,$true)
         try {
             foreach ($file in $files) {
                 $entry = $archive.CreateEntry($file.ArchiveName,[System.IO.Compression.CompressionLevel]::NoCompression)

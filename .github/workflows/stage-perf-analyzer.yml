@@ -8,6 +8,7 @@ on:
       - tests/test_inspect_vitasdk_bundle.py
       - tools/lf2_stage_pair_bounds.h
       - tests/native/test_stage_pair_bounds.c
+      - tests/native/test_stage_world_regions.c
       - tests/test_analyze_stage_perf_log.py
       - .github/workflows/stage-perf-analyzer.yml
   push:
@@ -33,4 +34,8 @@ jobs:
         run: |
           cc -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Itools tests/native/test_stage_pair_bounds.c -o /tmp/lf2_pair_bounds_ubsan
           /tmp/lf2_pair_bounds_ubsan
+      - name: Verify 200k mirrored LF2 region candidates with UBSan
+        run: |
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Itools tests/native/test_stage_world_regions.c -o /tmp/lf2_world_regions_ubsan
+          /tmp/lf2_world_regions_ubsan
 

@@ -9,6 +9,10 @@ on:
       - tools/lf2_stage_pair_bounds.h
       - tests/native/test_stage_pair_bounds.c
       - tests/native/test_stage_world_regions.c
+      - tests/native/test_stage_pair_runtime_adapter.c
+      - tools/lf2_stage_pair_runtime.inc
+      - tools/apply_round31_broadphase.py
+      - tests/test_apply_round31_broadphase.py
       - tests/test_analyze_stage_perf_log.py
       - .github/workflows/stage-perf-analyzer.yml
   push:
@@ -38,4 +42,11 @@ jobs:
         run: |
           cc -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Itools tests/native/test_stage_world_regions.c -o /tmp/lf2_world_regions_ubsan
           /tmp/lf2_world_regions_ubsan
+      - name: Test opt-in Stage adapter with 200k mutable runtime mock cases
+        run: |
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=undefined -fno-sanitize-recover=all -Itools tests/native/test_stage_pair_runtime_adapter.c -o /tmp/lf2_stage_adapter_test
+          /tmp/lf2_stage_adapter_test
+      - name: Test Round-27 source integration patcher against historic tree
+        run: python3 -m unittest discover -s tests -p 'test_apply_round31_broadphase.py' -v
+
 

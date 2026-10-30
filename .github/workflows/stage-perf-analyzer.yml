@@ -60,10 +60,7 @@ jobs:
           python3 tools/apply_round31_broadphase.py "$ROOT"
           python3 tools/apply_round31_broadphase.py "$ROOT" --apply
           python3 tools/apply_round31_broadphase.py "$ROOT" --apply --enable
-          grep -q '^#define LF2_STAGE_BROADPHASE_ENABLED 1
-
-
- "$ROOT/src/game.c"
+          grep -Fq 'LF2_STAGE_BROADPHASE_ENABLED 1' "$ROOT/src/game.c"
           python3 tools/apply_round31_broadphase.py "$ROOT" --undo --apply
           test ! -f "$ROOT/src/fix3/lf2_stage_pair_runtime.inc"
           test ! -f "$ROOT/src/fix3/lf2_stage_pair_bounds.h"
